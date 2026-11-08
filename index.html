@@ -1,0 +1,2543 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>ПОЛИГОН ТРАВМ — 3D симулятор падений, регдолла и переломов</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,Arial,sans-serif;color:#eee;user-select:none;-webkit-user-select:none}
+#app{position:fixed;inset:0}
+#app canvas{display:block;width:100%;height:100%}
+.hud{position:fixed;pointer-events:none;z-index:10;text-shadow:0 1px 3px #000}
+#vitals{left:14px;top:14px;width:250px}
+.bar{margin-bottom:7px}
+.bar .lbl{font-size:11px;letter-spacing:.09em;text-transform:uppercase;opacity:.9;display:flex;justify-content:space-between;margin-bottom:2px}
+.bar .trk{height:9px;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.2);border-radius:3px;overflow:hidden}
+.bar .fil{height:100%;width:100%;transition:width .2s}
+#tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.tag{font-size:11px;padding:2px 7px;border-radius:10px;background:rgba(160,20,20,.75);border:1px solid rgba(255,120,120,.5)}
+.tag.ok{background:rgba(30,110,50,.75);border-color:rgba(120,255,160,.5)}
+.tag.warn{background:rgba(160,110,10,.78);border-color:rgba(255,210,100,.5)}
+#bodyPanel{left:14px;bottom:14px;width:260px;background:rgba(8,10,14,.62);border:1px solid rgba(255,255,255,.14);border-radius:8px;padding:8px 10px;backdrop-filter:blur(3px)}
+#bodyPanel .ttl{font-size:11px;letter-spacing:.12em;opacity:.8;margin-bottom:6px}
+#bodyPanel .ttl small{opacity:.6}
+#panelRow{display:flex;gap:10px}
+#diagram{position:relative;width:130px;height:268px;flex:none}
+#diagram div{position:absolute;border-radius:5px;border:1px solid rgba(255,255,255,.35);transition:background .3s}
+.s0{background:rgba(70,200,110,.35)}.s1{background:rgba(240,210,60,.75)}.s2{background:rgba(255,140,30,.85)}.s3{background:rgba(230,30,30,.9)}.s4{background:rgba(90,0,0,.95)}
+#injList{list-style:none;margin:0;padding:0;font-size:11.5px;line-height:1.35;max-height:268px;overflow:hidden;flex:1}
+#injList li{margin-bottom:3px;padding-left:6px;border-left:3px solid #aaa}
+#injList li.l1{border-color:#f0d23c}#injList li.l2{border-color:#ff8c1e}#injList li.l3{border-color:#e62020}#injList li.l4{border-color:#7a0000}
+#injList li.none{border-color:#3ec96e;opacity:.8}
+#items{left:50%;bottom:14px;transform:translateX(-50%);display:flex;gap:10px}
+.slot{width:92px;padding:6px 4px;text-align:center;background:rgba(8,10,14,.65);border:1px solid rgba(255,255,255,.18);border-radius:8px;font-size:11px}
+.slot b{display:block;font-size:17px}
+.slot i{font-style:normal;opacity:.65;font-size:10px}
+#toasts{top:70px;left:50%;transform:translateX(-50%);width:min(560px,90vw);text-align:center}
+.toast{margin:0 auto 6px;padding:6px 14px;border-radius:6px;font-size:15px;font-weight:600;background:rgba(10,10,14,.75);border:1px solid rgba(255,255,255,.2);animation:tin .25s ease-out;display:table}
+.toast.bad{background:rgba(120,10,10,.85);border-color:#ff5a5a}
+.toast.warn{background:rgba(120,80,0,.85);border-color:#ffc04d}
+.toast.good{background:rgba(10,90,40,.85);border-color:#5aff9a}
+@keyframes tin{from{transform:translateY(-8px);opacity:0}to{transform:none;opacity:1}}
+#prompt{left:50%;bottom:92px;transform:translateX(-50%);font-size:16px;font-weight:600;text-align:center;padding:5px 14px;background:rgba(0,0,0,.45);border-radius:6px;display:none}
+#speedo{right:16px;top:14px;text-align:right;font-size:13px;opacity:.9;line-height:1.5}
+#hint{right:14px;bottom:14px;font-size:11px;line-height:1.55;text-align:right;opacity:.75;background:rgba(0,0,0,.35);padding:6px 10px;border-radius:6px}
+#hint kbd{background:rgba(255,255,255,.18);border-radius:3px;padding:0 5px;font-family:inherit;border:1px solid rgba(255,255,255,.25)}
+.ov{position:fixed;inset:0;pointer-events:none;z-index:5;opacity:0}
+#fxPain{background:radial-gradient(ellipse at center,transparent 45%,rgba(150,25,25,.65) 100%)}
+/* «помутнение» — светлая молочная дымка вместо тёмного экрана */
+#fxBlack{background:radial-gradient(ellipse at center,rgba(220,225,235,.28) 0%,rgba(195,200,214,.7) 100%);z-index:6}
+#fxFlash{background:rgba(255,40,20,.4);z-index:7;transition:opacity .35s}
+#fxCrush{z-index:7}
+.screen{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,rgba(20,26,36,.88),rgba(0,0,0,.96));text-align:center}
+.screen .box{max-width:760px;padding:26px 34px}
+.screen h1{font-size:44px;letter-spacing:.08em;margin:0 0 4px;color:#ff4d3d;text-shadow:0 0 22px rgba(255,60,40,.5)}
+.screen h2{font-size:15px;font-weight:400;opacity:.8;margin:0 0 18px;letter-spacing:.2em}
+.screen .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:4px 26px;text-align:left;font-size:14px;margin:14px 0 20px}
+.screen kbd{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.3);border-radius:4px;padding:1px 7px;font-family:inherit;margin-right:6px}
+.btn{pointer-events:auto;cursor:pointer;border:0;background:#d62828;color:#fff;font-size:18px;font-weight:700;padding:12px 38px;border-radius:6px;letter-spacing:.12em}
+.btn:hover{background:#f03030}
+.screen p{font-size:13px;opacity:.7;line-height:1.5}
+#death h1{color:#c1121f}
+#death .why{font-size:19px;margin:6px 0 16px}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="ov" id="fxPain"></div><div class="ov" id="fxBlack"></div><div class="ov" id="fxFlash"></div>
+
+<div id="vitals" class="hud">
+  <div class="bar"><div class="lbl"><span>Кровь</span><span id="vBloodT">100%</span></div><div class="trk"><div class="fil" id="vBlood" style="background:#c1121f"></div></div></div>
+  <div class="bar"><div class="lbl"><span>Боль</span><span id="vPainT">0</span></div><div class="trk"><div class="fil" id="vPain" style="background:#f48c06"></div></div></div>
+  <div class="bar"><div class="lbl"><span>Сознание</span><span id="vConsT">100</span></div><div class="trk"><div class="fil" id="vCons" style="background:#4cc9f0"></div></div></div>
+  <div class="bar"><div class="lbl"><span>Выносливость</span><span id="vStamT">100</span></div><div class="trk"><div class="fil" id="vStam" style="background:#90be6d"></div></div></div>
+  <div id="tags"></div>
+</div>
+
+<div id="speedo" class="hud"></div>
+
+<div id="bodyPanel" class="hud">
+  <div class="ttl">СОСТОЯНИЕ ТЕЛА <small>[Tab]</small></div>
+  <div id="panelRow"><div id="diagram"></div><ul id="injList"></ul></div>
+</div>
+
+<div id="items" class="hud">
+  <div class="slot"><i>[1]</i><b id="nBand">3</b>Бинт</div>
+  <div class="slot"><i>[2]</i><b id="nPill">2</b>Обезболивающее</div>
+  <div class="slot"><i>[3]</i><b id="nSplint">2</b>Шина</div>
+</div>
+<div id="toasts" class="hud"></div>
+<div id="prompt" class="hud"></div>
+<div id="hint" class="hud">
+  <kbd>WASD</kbd> ходьба · <kbd>Shift</kbd> бег · <kbd>Пробел</kbd> прыжок<br>
+  <kbd>Q</kbd> обмякнуть / встать · <kbd>E</kbd> медпункт<br>
+  <kbd>T</kbd> замедление · <kbd>R</kbd> возрождение · <kbd>Tab</kbd> травмы
+</div>
+
+<div class="screen" id="start">
+  <div class="box">
+    <h1>ПОЛИГОН ТРАВМ</h1>
+    <h2>РЕАЛИСТИЧНЫЙ СИМУЛЯТОР ПАДЕНИЙ · РЕГДОЛЛ · ПЕРЕЛОМЫ</h2>
+    <div id="loading" style="margin:20px 0"><span id="loadMsg">Загрузка физики и генерация текстур…</span></div>
+    <div id="startBody" style="display:none">
+      <p>Каждая кость учитывает силу удара. Падайте с высоты, попадайте под маятниковые молоты, прессы, поршни, шипы, дисковые и валковые шредеры — и смотрите, что останется от вашего героя. Переломы, сотрясения, кровотечения, шок и потеря сознания влияют на управление: с повреждённой ногой герой хромает, а при тяжёлом переломе сворачивается в позу эмбриона от боли.</p>
+      <div class="grid">
+        <div><kbd>W A S D</kbd>движение</div><div><kbd>Мышь</kbd>камера (колесо — зум)</div>
+        <div><kbd>Shift</kbd>бег (тратит силы)</div><div><kbd>Пробел</kbd>прыжок / встать</div>
+        <div><kbd>Q</kbd>обмякнуть (регдолл) / встать</div><div><kbd>E</kbd>удерживать у медпункта</div>
+        <div><kbd>1</kbd>бинт — остановить кровь</div><div><kbd>2</kbd>обезболивающее</div>
+        <div><kbd>3</kbd>шина на перелом</div><div><kbd>T</kbd>замедление времени</div>
+        <div><kbd>R</kbd>возродиться</div><div><kbd>Tab</kbd>панель травм</div>
+      </div>
+      <button class="btn" id="btnPlay">ИГРАТЬ</button>
+      <p style="margin-top:14px">Подсказка: лестничная башня (10 м), лифт на 30 м, батуты-катапульты, коридор маятниковых молотов, прессы, конвейер со шредером, мост над дисковым шредером, контейнерный двор, прыжок с 8 м в коробки, ступенчатая пирамида, шар-«бабка», коридор поршней, шипы и кегельбан.</p>
+    </div>
+  </div>
+</div>
+<div class="screen" id="death" style="display:none">
+  <div class="box">
+    <h1>ВЫ ПОГИБЛИ</h1>
+    <div class="why" id="deathWhy"></div>
+    <div id="deathInj" style="font-size:13px;opacity:.75;margin-bottom:18px"></div>
+    <button class="btn" id="btnRespawn">ВОЗРОДИТЬСЯ [R]</button>
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import RAPIER from 'https://esm.sh/@dimforge/rapier3d-compat@0.19.3';
+
+const $ = id => document.getElementById(id);
+const clamp = (x,a,b)=>Math.max(a,Math.min(b,x));
+const lerp = (a,b,t)=>a+(b-a)*t;
+const smooth = (a,b,x)=>{const t=clamp((x-a)/(b-a),0,1);return t*t*(3-2*t)};
+const rnd = (a,b)=>a+Math.random()*(b-a);
+let _seed=1337; const srnd=()=>{ _seed=(_seed*16807)%2147483647; return (_seed-1)/2147483646; };
+
+try { await RAPIER.init(); } catch(e){ $('loadMsg').textContent='Не удалось загрузить физику: '+e; throw e; }
+
+/* ================= RENDERER / SCENE ================= */
+const renderer = new THREE.WebGLRenderer({antialias:true, powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio,1.75));
+renderer.setSize(innerWidth,innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+$('app').appendChild(renderer.domElement);
+const MAXANI = Math.min(16, renderer.capabilities.getMaxAnisotropy());
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0xb4c6d6, 70, 300);
+const camera = new THREE.PerspectiveCamera(65, innerWidth/innerHeight, 0.08, 700);
+
+const skyMat = new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,fog:false,
+  vertexShader:`varying vec3 vP; void main(){ vP=normalize(position); gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
+  fragmentShader:`varying vec3 vP; void main(){ float h=clamp(vP.y,-0.1,1.); vec3 top=vec3(.22,.43,.78), hor=vec3(.78,.86,.93), low=vec3(.45,.47,.5); vec3 c=mix(hor,top,pow(max(h,0.),.55)); c=mix(c,low,smoothstep(0.,-.1,vP.y)*.6); vec3 sun=normalize(vec3(.5,.8,.3)); float d=max(dot(vP,sun),0.); c+=vec3(1.,.85,.6)*pow(d,500.)*2.5; c+=vec3(1.,.8,.5)*pow(d,10.)*.14; gl_FragColor=vec4(c,1.); }`});
+const sky = new THREE.Mesh(new THREE.SphereGeometry(420,32,16), skyMat);
+scene.add(sky);
+{
+  const envScene = new THREE.Scene(); envScene.add(new THREE.Mesh(new THREE.SphereGeometry(50,32,16), skyMat));
+  const pm = new THREE.PMREMGenerator(renderer);
+  scene.environment = pm.fromScene(envScene,0.03).texture;
+  scene.environmentIntensity = 0.6;
+}
+scene.add(new THREE.HemisphereLight(0xcfe3ff,0x6c655c,0.7));
+const sun = new THREE.DirectionalLight(0xfff1dc,3.0);
+sun.position.set(50,80,30);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048);
+const sc = sun.shadow.camera; sc.left=-45; sc.right=45; sc.top=45; sc.bottom=-45; sc.near=1; sc.far=240;
+sun.shadow.bias=-0.0004; sun.shadow.normalBias=0.04;
+scene.add(sun); scene.add(sun.target);
+
+/* ================= PHYSICS WORLD ================= */
+const world = new RAPIER.World({x:0,y:-9.81,z:0});
+const DT = 1/120;
+world.timestep = DT;
+try { world.numSolverIterations = 8; } catch(e){}
+/* Группы столкновений: бит 0x1 — окружение; биты 0x2..0x800 — отдельные кости регдолла; 0x4000 — прессы */
+const RAG_ALL = 0x0FFE;
+const NOSELF_FILTER = 0xFFFF & ~RAG_ALL;           // 0xF001
+const ENV_RAY = (0x0001<<16)|NOSELF_FILTER;        // лучи игнорируют регдолл
+
+/* ================= ПРОЦЕДУРНЫЕ PBR-ТЕКСТУРЫ =================
+   Каждый набор: альбедо + карта нормалей (из карты высот) + ORM (G — шероховатость, B — металличность).
+   Все шумы бесшовные (тайлятся), нормали считаются с заворачиванием краёв — швов нет. */
+function mulberry(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+const mkc=(w,h)=>{ const c=document.createElement('canvas'); c.width=w; c.height=h; return c; };
+const ctx2=(c)=>c.getContext('2d',{willReadFrequently:true});
+function vnoise(w,h,gx,gy,rng){
+  const L=new Float32Array(gx*gy); for(let i=0;i<L.length;i++) L[i]=rng();
+  const out=new Float32Array(w*h);
+  for(let y=0;y<h;y++){
+    const fy=y/h*gy, iy=Math.floor(fy), ty=fy-iy, sy=ty*ty*(3-2*ty), r0=(iy%gy)*gx, r1=((iy+1)%gy)*gx;
+    for(let x=0;x<w;x++){
+      const fx=x/w*gx, ix=Math.floor(fx), tx=fx-ix, sx=tx*tx*(3-2*tx), x0=ix%gx, x1=(ix+1)%gx;
+      const a=L[r0+x0], b=L[r0+x1], c=L[r1+x0], d=L[r1+x1];
+      out[y*w+x]=a+(b-a)*sx+(c-a)*sy+(a-b-c+d)*sx*sy;
+    }
+  }
+  return out;
+}
+function fbm(w,h,gx,gy,oct,pers,seed){
+  const rng=mulberry(seed), acc=new Float32Array(w*h); let amp=1,tot=0;
+  for(let o=0;o<oct;o++){
+    const n=vnoise(w,h,Math.min(gx*(1<<o),w),Math.min(gy*(1<<o),h),rng);
+    for(let i=0;i<acc.length;i++) acc[i]+=n[i]*amp; tot+=amp; amp*=pers;
+  }
+  for(let i=0;i<acc.length;i++) acc[i]/=tot; return acc;
+}
+const mkT=(c,srgb)=>{ const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.anisotropy=MAXANI; t.colorSpace=srgb?THREE.SRGBColorSpace:THREE.NoColorSpace; return t; };
+function buildSet(w,h,paint,o={}){
+  const ca=mkc(w,h), ga=ctx2(ca), ch=mkc(w,h), gh=ctx2(ch);
+  paint(ga,gh,w,h);
+  const AD=ga.getImageData(0,0,w,h).data, HD=gh.getImageData(0,0,w,h).data, hh=new Float32Array(w*h);
+  for(let i=0;i<hh.length;i++) hh[i]=HD[i*4]/255;
+  const cn=mkc(w,h), gn=ctx2(cn), nd=gn.createImageData(w,h), N=nd.data, st=o.n||3;
+  for(let y=0;y<h;y++){
+    const ym=((y-1+h)%h)*w, yp=((y+1)%h)*w, r=y*w;
+    for(let x=0;x<w;x++){
+      const xm=(x-1+w)%w, xp=(x+1)%w, p=(r+x)*4;
+      const nx=-(hh[r+xp]-hh[r+xm])*st, ny=(hh[yp+x]-hh[ym+x])*st, l=Math.sqrt(nx*nx+ny*ny+1);
+      N[p]=(nx/l*.5+.5)*255; N[p+1]=(ny/l*.5+.5)*255; N[p+2]=(1/l*.5+.5)*255; N[p+3]=255;
+    }
+  }
+  gn.putImageData(nd,0,0);
+  const co=mkc(w,h), go=ctx2(co), od=go.createImageData(w,h), O=od.data, rf=o.rough||(()=>.9), mf=o.metal;
+  for(let i=0;i<hh.length;i++){
+    const p=i*4; O[p]=255; O[p+1]=clamp(rf(i,hh,AD),0.04,1)*255; O[p+2]=mf?clamp(mf(i,hh,AD),0,1)*255:0; O[p+3]=255;
+  }
+  go.putImageData(od,0,0);
+  return {map:mkT(ca,true),normal:mkT(cn,false),orm:mkT(co,false),hasMetal:!!mf,albedoCanvas:ca};
+}
+function pbr(set,o={}){
+  const p={map:set.map,normalMap:set.normal,normalScale:new THREE.Vector2(o.ns||1,o.ns||1),roughnessMap:set.orm,roughness:1,metalness:set.hasMetal?1:0};
+  if(set.hasMetal) p.metalnessMap=set.orm;
+  if(o.color!==undefined) p.color=o.color;
+  if(o.side) p.side=o.side;
+  Object.assign(p,o.extra||{});
+  return o.phys?new THREE.MeshPhysicalMaterial(p):new THREE.MeshStandardMaterial(p);
+}
+function fillPix(g,w,h,fn){ const id=g.createImageData(w,h), d=id.data; for(let y=0;y<h;y++) for(let x=0;x<w;x++){ const i=y*w+x, p=i*4; fn(x,y,i,d,p); } g.putImageData(id,0,0); }
+function scratches(g,w,h,n,rng,col,wd,len=60,hor=.25){
+  g.strokeStyle=col; g.lineWidth=wd; g.lineCap='round';
+  for(let i=0;i<n;i++){ let x=rng()*w, y=rng()*h; const a=(rng()-.5)*hor*2+(rng()<.2?1.4:0), l=10+rng()*len; g.beginPath(); g.moveTo(x,y); g.lineTo(x+Math.cos(a)*l,y+Math.sin(a)*l); g.stroke(); }
+}
+
+/* --- бетон --- */
+function concreteSet(S,o){
+  const seed=o.seed||1, bc=o.base, sl=o.slabs||1;
+  return buildSet(S,S,(ga,gh,w,h)=>{
+    const n1=fbm(w,h,3,3,5,.55,seed), n2=fbm(w,h,40,40,3,.6,seed+1), n3=fbm(w,h,90,90,2,.5,seed+2), st=o.streaks?fbm(w,h,28,2,2,.5,seed+3):null, rng=mulberry(seed+9);
+    const slab=[]; for(let i=0;i<sl*sl;i++) slab.push(.94+rng()*.12);
+    const sw=w/sl, gw=o.groove||3.2;
+    const ia=ga.createImageData(w,h), A=ia.data, ih=gh.createImageData(w,h), H=ih.data;
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+      const i=y*w+x, p=i*4, tone=slab[((y/sw)|0)*sl+((x/sw)|0)];
+      let v=(.78+.4*n1[i])*(.9+.2*n2[i])*tone;
+      const pore=n3[i]>.7?Math.min(.5,(n3[i]-.7)*6):0; v*=1-pore;
+      if(st) v*=.84+.3*st[i];
+      const sp=rng(); let spk=1; if(sp<.012) spk=.78; else if(sp>.992) spk=1.18; v*=spk;
+      const dx=x%sw, dy=y%sw, de=Math.min(dx,sw-1-dx,dy,sw-1-dy), gv=1-smooth(0,gw,de);
+      v*=1-.42*gv;
+      A[p]=bc[0]*v; A[p+1]=bc[1]*v; A[p+2]=bc[2]*v; A[p+3]=255;
+      const hv=clamp(.5+(n2[i]-.5)*.5+(n1[i]-.5)*.25+(n3[i]-.5)*.2-pore*.8-(spk<1?.1:0)-gv*.5,0,1)*255;
+      H[p]=H[p+1]=H[p+2]=hv; H[p+3]=255;
+    }
+    ga.putImageData(ia,0,0); gh.putImageData(ih,0,0);
+    for(let c=0;c<(o.cracks||0);c++){
+      let x=60+rng()*(w-120), y=60+rng()*(h-120), a=rng()*6.28; const pts=[[x,y]];
+      for(let k=0;k<16;k++){ a+=(rng()-.5)*1.1; x=clamp(x+Math.cos(a)*(8+rng()*14),10,w-10); y=clamp(y+Math.sin(a)*(8+rng()*14),10,h-10); pts.push([x,y]); }
+      for(const [g,col,wd] of [[ga,'rgba(15,15,15,.12)',4.5],[ga,'rgba(15,15,15,.62)',1.3],[gh,'rgba(0,0,0,.35)',4],[gh,'rgba(0,0,0,.85)',1.8]]){
+        g.strokeStyle=col; g.lineWidth=wd; g.lineJoin='round'; g.beginPath(); g.moveTo(pts[0][0],pts[0][1]); for(const q of pts) g.lineTo(q[0],q[1]); g.stroke();
+      }
+    }
+    if(o.tieHoles){
+      for(let px=0;px<sl;px++) for(let py=0;py<sl;py++) for(const fx of [.25,.75]) for(const fy of [.2,.5,.8]){
+        const x=(px+fx)*sw, y=(py+fy)*sw;
+        ga.fillStyle='rgba(20,20,22,.7)'; ga.beginPath(); ga.arc(x,y,6,0,7); ga.fill();
+        ga.strokeStyle='rgba(190,190,190,.35)'; ga.lineWidth=2; ga.beginPath(); ga.arc(x,y,8,0,7); ga.stroke();
+        gh.fillStyle='rgb(10,10,10)'; gh.beginPath(); gh.arc(x,y,6,0,7); gh.fill();
+        gh.strokeStyle='rgb(190,190,190)'; gh.lineWidth=2; gh.beginPath(); gh.arc(x,y,8.5,0,7); gh.stroke();
+      }
+    }
+    if(o.stains){
+      for(let i=0;i<14;i++){ const r=30+rng()*60, x=r+rng()*(w-2*r), y=r+rng()*(h-2*r), gr=ga.createRadialGradient(x,y,2,x,y,r); gr.addColorStop(0,'rgba(25,22,20,.22)'); gr.addColorStop(1,'rgba(25,22,20,0)'); ga.fillStyle=gr; ga.fillRect(x-r,y-r,2*r,2*r); }
+    }
+  },{n:o.n||4,rough:(i,hh)=>.96-(hh[i]-.5)*.5});
+}
+
+/* --- металл: шлифованная сталь, панели, заклёпки, ржавчина, царапины --- */
+function metalSet(S,o){
+  const seed=o.seed||5, bc=o.base; let RU, ST;
+  return buildSet(S,S,(ga,gh,w,h)=>{
+    ST=fbm(w,h,2,Math.min(200,(h*.4)|0),1,1,seed);
+    const mid=fbm(w,h,6,6,4,.55,seed+1), fine=fbm(w,h,64,64,2,.5,seed+2), rs=fbm(w,h,5,4,4,.55,seed+3), rng=mulberry(seed+7);
+    RU=new Float32Array(w*h);
+    const P=o.panels||0, ps=P?w/P:0, ra=o.rust||0;
+    const ia=ga.createImageData(w,h), A=ia.data, ih=gh.createImageData(w,h), H=ih.data;
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+      const i=y*w+x, p=i*4, stv=ST[i];
+      let v=(.84+.3*stv)*(.92+.16*mid[i])*(.95+.1*fine[i]);
+      let seam=0; if(P){ const dx=x%ps, dy=y%ps, de=Math.min(dx,ps-1-dx,dy,ps-1-dy); seam=1-smooth(0,2.4,de); }
+      v*=1-.55*seam;
+      const ru=ra>0?smooth(.66-ra*.34,.78-ra*.34,rs[i]*.85+fine[i]*.15):0; RU[i]=ru;
+      let r=bc[0]*v, g=bc[1]*v, b=bc[2]*v;
+      if(ru>0){ const rv=.55+.9*fine[i]; r+=(125*rv-r)*ru; g+=(62*rv-g)*ru; b+=(32*rv-b)*ru; }
+      A[p]=r; A[p+1]=g; A[p+2]=b; A[p+3]=255;
+      const hv=clamp(.5+(stv-.5)*.14+(fine[i]-.5)*.14-seam*.55+ru*(fine[i]-.5)*.7,0,1)*255;
+      H[p]=H[p+1]=H[p+2]=hv; H[p+3]=255;
+    }
+    ga.putImageData(ia,0,0); gh.putImageData(ih,0,0);
+    if(o.rivets&&P){
+      for(let pi=0;pi<P;pi++) for(let pj=0;pj<P;pj++) for(const [cx,cy] of [[16,16],[ps-16,16],[16,ps-16],[ps-16,ps-16]]){
+        const x=pi*ps+cx, y=pj*ps+cy;
+        ga.fillStyle='rgba(25,25,28,.75)'; ga.beginPath(); ga.arc(x,y,6.8,0,7); ga.fill();
+        const gr=ga.createRadialGradient(x-1.5,y-1.5,.5,x,y,5); gr.addColorStop(0,'rgb(225,230,238)'); gr.addColorStop(1,'rgb(110,116,126)'); ga.fillStyle=gr; ga.beginPath(); ga.arc(x,y,5,0,7); ga.fill();
+        gh.fillStyle='rgb(50,50,50)'; gh.beginPath(); gh.arc(x,y,7,0,7); gh.fill();
+        const gg=gh.createRadialGradient(x,y,0,x,y,5); gg.addColorStop(0,'rgb(255,255,255)'); gg.addColorStop(1,'rgb(150,150,150)'); gh.fillStyle=gg; gh.beginPath(); gh.arc(x,y,5,0,7); gh.fill();
+      }
+    }
+    const sc=o.scr||34;
+    scratches(ga,w,h,sc,rng,'rgba(225,230,236,.2)',.8,70); scratches(gh,w,h,sc,rng,'rgba(0,0,0,.28)',.9,70);
+  },{n:o.n||2.4,rough:(i)=>.28+(ST[i]-.5)*.35+RU[i]*.58+(o.rr||0),metal:(i)=>.95*(1-RU[i]*.88)});
+}
+
+/* --- окрашенный металл (медпункт) --- */
+function paintSet(S,bc,seed){
+  return buildSet(S,S,(ga,gh,w,h)=>{
+    const n=fbm(w,h,4,4,4,.55,seed), f=fbm(w,h,60,60,2,.5,seed+1), rng=mulberry(seed+3), ps=w/2;
+    const ia=ga.createImageData(w,h), A=ia.data, ih=gh.createImageData(w,h), H=ih.data;
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+      const i=y*w+x,p=i*4, dx=x%ps, dy=y%ps, de=Math.min(dx,ps-1-dx,dy,ps-1-dy), seam=1-smooth(0,2.2,de);
+      const v=(.86+.16*n[i])*(.97+.06*f[i])*(1-.45*seam)*(1-.18*smooth(.62,.8,n[i]));
+      A[p]=bc[0]*v; A[p+1]=bc[1]*v; A[p+2]=bc[2]*v; A[p+3]=255;
+      const hv=clamp(.55+(f[i]-.5)*.1-seam*.5,0,1)*255; H[p]=H[p+1]=H[p+2]=hv; H[p+3]=255;
+    }
+    ga.putImageData(ia,0,0); gh.putImageData(ih,0,0);
+    for(let pi=0;pi<2;pi++) for(let pj=0;pj<2;pj++) for(const [cx,cy] of [[12,12],[ps-12,12],[12,ps-12],[ps-12,ps-12]]){
+      const x=pi*ps+cx,y=pj*ps+cy; ga.fillStyle='rgba(60,60,64,.8)'; ga.beginPath(); ga.arc(x,y,3.6,0,7); ga.fill(); gh.fillStyle='rgb(220,220,220)'; gh.beginPath(); gh.arc(x,y,3.6,0,7); gh.fill();
+    }
+    scratches(ga,w,h,22,rng,'rgba(70,70,74,.25)',.9,40); scratches(gh,w,h,22,rng,'rgba(0,0,0,.3)',.9,40);
+  },{n:2,rough:(i,hh)=>.5+(.5-hh[i])*.3});
+}
+
+/* --- полосы опасности с облупившейся краской --- */
+function hazardSet(){
+  return buildSet(256,256,(ga,gh,w,h)=>{
+    const n1=fbm(w,h,6,6,4,.5,3), n2=fbm(w,h,64,64,2,.5,4), wear=fbm(w,h,10,10,4,.6,7);
+    const ia=ga.createImageData(w,h), A=ia.data, ih=gh.createImageData(w,h), H=ih.data;
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+      const i=y*w+x,p=i*4, s=(x+y)%64, m=s%32, d=Math.min(m,32-m), e=smooth(0,2.2,d), a=s<32?.5+.5*e:.5-.5*e;
+      let r=24+(242-24)*a, g=24+(194-24)*a, b=28+(0-28)*a;
+      const ch=smooth(.64,.69,wear[i]), mv=.8+.4*n2[i];
+      r+=(112*mv-r)*ch; g+=(114*mv-g)*ch; b+=(120*mv-b)*ch;
+      const dirt=.78+.32*n1[i]; A[p]=r*dirt; A[p+1]=g*dirt; A[p+2]=b*dirt; A[p+3]=255;
+      const hv=(.62-.22*ch+(n2[i]-.5)*.08)*255; H[p]=H[p+1]=H[p+2]=clamp(hv,0,255); H[p+3]=255;
+    }
+    ga.putImageData(ia,0,0); gh.putImageData(ih,0,0);
+  },{n:3,rough:(i,hh)=>.52+(.5-hh[i])*.5});
+}
+
+/* --- деревянный ящик: рама, доски, диагональная связь, гвозди --- */
+function woodSet(){
+  return buildSet(512,512,(ga,gh,w,h)=>{
+    const G=fbm(w,h,3,110,3,.5,5), G2=fbm(w,h,2,70,2,.5,6), rng=mulberry(15), tone=[]; for(let i=0;i<14;i++) tone.push(.82+rng()*.34);
+    const ia=ga.createImageData(w,h), A=ia.data, ih=gh.createImageData(w,h), H=ih.data, FB=56;
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+      const i=y*w+x,p=i*4; let id, gr, edge, raise=.5;
+      const inner=x>=FB&&x<w-FB&&y>=FB&&y<h-FB;
+      const dd=Math.abs(x+y-w)/1.414;
+      if(!inner){
+        if(y<FB){ id=0; gr=G[i]; edge=Math.min(y,FB-1-y); }
+        else if(y>=h-FB){ id=1; gr=G[i]; edge=Math.min(y-(h-FB),h-1-y); }
+        else if(x<FB){ id=2; gr=G[((x*7)%h)*w+((y*3)%w)]; edge=Math.min(x,FB-1-x); }
+        else { id=3; gr=G[((x*7)%h)*w+((y*3)%w)]; edge=Math.min(x-(w-FB),w-1-x); }
+        raise=.62;
+      } else if(dd<24){ id=12; gr=G[((x+y)%h)*w+((x-y+w)%w)]; edge=24-dd; raise=.68; }
+      else { const k=Math.floor((y-FB)/((h-2*FB)/4)); id=4+k; gr=G2[i]; const yy=(y-FB)%((h-2*FB)/4); edge=Math.min(yy,(h-2*FB)/4-1-yy); }
+      const gap=1-smooth(0,2.5,edge);
+      let v=tone[id]*(.76+.5*gr)*(1-.55*gap);
+      const ed=Math.min(x,y,w-1-x,h-1-y); v*=.82+.18*smooth(0,18,ed);
+      A[p]=176*v; A[p+1]=124*v; A[p+2]=72*v; A[p+3]=255;
+      const hv=clamp(raise+(gr-.5)*.28-gap*.5,0,1)*255; H[p]=H[p+1]=H[p+2]=hv; H[p+3]=255;
+    }
+    ga.putImageData(ia,0,0); gh.putImageData(ih,0,0);
+    const nail=(x,y)=>{ ga.fillStyle='rgba(30,26,22,.75)'; ga.beginPath(); ga.arc(x,y,5.5,0,7); ga.fill(); const q=ga.createRadialGradient(x-1,y-1,.5,x,y,4); q.addColorStop(0,'rgb(170,170,175)'); q.addColorStop(1,'rgb(80,80,86)'); ga.fillStyle=q; ga.beginPath(); ga.arc(x,y,4,0,7); ga.fill();
+      gh.fillStyle='rgb(30,30,30)'; gh.beginPath(); gh.arc(x,y,6,0,7); gh.fill(); gh.fillStyle='rgb(230,230,230)'; gh.beginPath(); gh.arc(x,y,3.6,0,7); gh.fill(); };
+    for(const x of [14,w-14]) for(const y of [14,h/2-8,h/2+8,h-14]) nail(x,y);
+    for(const x of [w/4,w/2,3*w/4]) for(const y of [14,h-14]) nail(x,y);
+    for(const y of [FB+50,FB+150,FB+250,FB+350]) for(const x of [FB+20,w-FB-20]) nail(x,y);
+    for(let k=0;k<5;k++){ const x=FB+30+rng()*(w-2*FB-60), y=FB+30+rng()*(h-2*FB-60);
+      for(let r=15;r>2;r-=4){ ga.strokeStyle=`rgba(70,40,15,${.5-r/40})`; ga.lineWidth=2; ga.beginPath(); ga.ellipse(x,y,r*1.5,r,0,0,7); ga.stroke(); gh.strokeStyle='rgba(0,0,0,.4)'; gh.lineWidth=2; gh.beginPath(); gh.ellipse(x,y,r*1.5,r,0,0,7); gh.stroke(); } }
+  },{n:3.2,rough:(i,hh)=>.8+(.5-hh[i])*.3});
+}
+
+/* --- конвейерная лента --- */
+function beltSet(){
+  return buildSet(256,256,(ga,gh,w,h)=>{
+    const f=fbm(w,h,64,64,2,.6,21), n=fbm(w,h,6,6,3,.5,22), ia=ga.createImageData(w,h), A=ia.data, ih=gh.createImageData(w,h), H=ih.data;
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+      const i=y*w+x,p=i*4, y0=((y+Math.abs(x-128)*.5)%128+128)%128, rib=smooth(0,3,y0)*(1-smooth(20,24,y0));
+      const edge=Math.min(x,w-1-x), side=1-smooth(0,6,edge);
+      const v=(.7+.5*f[i])*(.82+.3*n[i])*(1+.25*rib)*(1-.2*side);
+      A[p]=38*v; A[p+1]=38*v; A[p+2]=42*v; A[p+3]=255;
+      const hv=clamp(.35+.4*rib+(f[i]-.5)*.2,0,1)*255; H[p]=H[p+1]=H[p+2]=hv; H[p+3]=255;
+    }
+    ga.putImageData(ia,0,0); gh.putImageData(ih,0,0);
+  },{n:3,rough:(i,hh)=>.9-hh[i]*.15});
+}
+
+/* --- картонная коробка --- */
+function cardSet(){
+  return buildSet(256,256,(ga,gh,w,h)=>{
+    const n=fbm(w,h,5,5,4,.55,31), f=fbm(w,h,3,120,2,.5,32), ia=ga.createImageData(w,h), A=ia.data, ih=gh.createImageData(w,h), H=ih.data;
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+      const i=y*w+x,p=i*4, ed=Math.min(x,y,w-1-x,h-1-y), eb=smooth(0,14,ed), v=(.8+.3*n[i])*(.9+.18*f[i])*(.75+.25*eb);
+      A[p]=186*v; A[p+1]=142*v; A[p+2]=94*v; A[p+3]=255;
+      const hv=clamp(.55+(n[i]-.5)*.3+(f[i]-.5)*.12-.25*(1-eb),0,1)*255; H[p]=H[p+1]=H[p+2]=hv; H[p+3]=255;
+    }
+    ga.putImageData(ia,0,0); gh.putImageData(ih,0,0);
+    ga.fillStyle='rgba(212,178,128,.82)'; ga.fillRect(104,0,48,h); ga.fillStyle='rgba(255,240,200,.28)'; ga.fillRect(110,0,6,h);
+    ga.fillStyle='rgba(120,90,50,.45)'; ga.fillRect(104,0,1.5,h); ga.fillRect(151,0,1.5,h);
+    gh.fillStyle='rgba(255,255,255,.22)'; gh.fillRect(104,0,48,h);
+    ga.fillStyle='rgba(50,30,15,.78)'; ga.font='bold 22px Arial'; ga.textAlign='center'; ga.fillText('ХРУПКОЕ',56,126); ga.fillText('ХРУПКОЕ',200,126);
+    ga.font='bold 34px Arial'; ga.fillText('⇧⇧',56,176); ga.fillText('⇧⇧',200,176); ga.font='bold 12px Arial'; ga.fillText('ВЕРХ',56,196); ga.fillText('ВЕРХ',200,196);
+    ga.strokeStyle='rgba(50,30,15,.7)'; ga.lineWidth=2; ga.strokeRect(14,86,84,128); ga.strokeRect(158,86,84,128);
+    ga.fillStyle='rgba(50,30,15,.6)'; for(let i=0;i<12;i++) ga.fillRect(24+i*5+(i%3),224,2+(i%2),12);
+    gh.fillStyle='rgba(0,0,0,.18)'; gh.fillRect(14,86,84,2);
+  },{n:3,rough:()=>.93});
+}
+
+/* --- кирпич --- */
+function brickSet(){
+  return buildSet(256,128,(ga,gh,w,h)=>{
+    const n=fbm(w,h,4,2,3,.55,41), f=fbm(w,h,80,40,2,.5,42), pit=fbm(w,h,70,35,1,1,43), ia=ga.createImageData(w,h), A=ia.data, ih=gh.createImageData(w,h), H=ih.data;
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+      const i=y*w+x,p=i*4, d=Math.min(x,y,w-1-x,h-1-y), mt=1-smooth(2,7,d);
+      const bv=.75+.55*n[i], pits=pit[i]>.78?.6:1; let r=156*bv*pits*(.9+.2*f[i]), g=72*bv*pits*(.88+.2*f[i]), b=52*bv*pits*(.9+.2*f[i]);
+      const mv=.82+.25*f[i]; r+=(182*mv-r)*mt; g+=(174*mv-g)*mt; b+=(160*mv-b)*mt;
+      A[p]=r; A[p+1]=g; A[p+2]=b; A[p+3]=255;
+      const hv=clamp((.72-.34*mt)+(f[i]-.5)*.2-(pit[i]>.78?.15:0),0,1)*255; H[p]=H[p+1]=H[p+2]=hv; H[p+3]=255;
+    }
+    ga.putImageData(ia,0,0); gh.putImageData(ih,0,0);
+  },{n:3.2,rough:()=>.93});
+}
+
+/* --- бочка: корпус и крышка --- */
+function barrelSet(){
+  return buildSet(256,256,(ga,gh,w,h)=>{
+    const n=fbm(w,h,4,4,4,.55,91), f=fbm(w,h,48,48,2,.5,92), dn=fbm(w,h,6,6,3,.5,93), ia=ga.createImageData(w,h), A=ia.data, ih=gh.createImageData(w,h), H=ih.data;
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+      const i=y*w+x,p=i*4; let hoop=0, hl=0;
+      for(const yc of [24,128,232]){ const d=y-yc, ad=Math.abs(d); hoop=Math.max(hoop,1-smooth(6,11,ad)); if(d<0&&ad<9) hl=Math.max(hl,1-ad/9); }
+      const seam=(x<2||x>w-3)?1:0, rust=smooth(.62,.74,dn[i]+(f[i]-.5)*.1);
+      let v=(.78+.4*n[i])*(.92+.14*f[i])*(1+.18*hl-.15*hoop)*(1-.4*seam);
+      let r=178*v, g=40*v, b=30*v; r+=(120*(.6+.8*f[i])-r)*rust; g+=(60*(.6+.8*f[i])-g)*rust; b+=(34*(.6+.8*f[i])-b)*rust;
+      A[p]=r; A[p+1]=g; A[p+2]=b; A[p+3]=255;
+      const hv=clamp(.42+.4*hoop+(f[i]-.5)*.1+(dn[i]-.5)*.2-seam*.3+rust*(f[i]-.5)*.5,0,1)*255; H[p]=H[p+1]=H[p+2]=hv; H[p+3]=255;
+    }
+    ga.putImageData(ia,0,0); gh.putImageData(ih,0,0);
+    ga.save(); ga.translate(128,76); ga.rotate(Math.PI/4); ga.fillStyle='#e9c21a'; ga.fillRect(-28,-28,56,56); ga.strokeStyle='#111'; ga.lineWidth=4; ga.strokeRect(-23,-23,46,46); ga.restore();
+    ga.fillStyle='#111'; ga.font='bold 40px Arial'; ga.textAlign='center'; ga.fillText('!',128,90); ga.font='bold 13px Arial'; ga.fillStyle='rgba(235,230,215,.85)'; ga.fillText('ОГНЕОПАСНО',128,118);
+    gh.fillStyle='rgba(255,255,255,.15)'; gh.save(); gh.translate(128,76); gh.rotate(Math.PI/4); gh.fillRect(-28,-28,56,56); gh.restore();
+  },{n:3,rough:(i,hh)=>.42+(.5-hh[i])*.4});
+}
+function barrelCapSet(){
+  return buildSet(128,128,(ga,gh,w,h)=>{
+    const n=fbm(w,h,4,4,3,.5,95), ia=ga.createImageData(w,h), A=ia.data, ih=gh.createImageData(w,h), H=ih.data;
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+      const i=y*w+x,p=i*4, r=Math.hypot(x-64,y-64), rim=smooth(52,58,r)*(1-smooth(60,64,r)), groove=1-smooth(0,2.5,Math.abs(r-40)), v=(.7+.5*n[i])*(1+.25*rim-.35*groove);
+      A[p]=96*v; A[p+1]=98*v; A[p+2]=104*v; A[p+3]=255;
+      H[p]=H[p+1]=H[p+2]=clamp(.5+.35*rim-.3*groove+(n[i]-.5)*.2,0,1)*255; H[p+3]=255;
+    }
+    ga.putImageData(ia,0,0); gh.putImageData(ih,0,0);
+    for(const [x,y] of [[84,50],[48,78]]){ ga.fillStyle='rgba(20,20,22,.8)'; ga.beginPath(); ga.arc(x,y,9,0,7); ga.fill(); ga.fillStyle='rgb(150,150,156)'; ga.beginPath(); ga.arc(x,y,6.5,0,7); ga.fill(); gh.fillStyle='rgb(240,240,240)'; gh.beginPath(); gh.arc(x,y,7,0,7); gh.fill(); }
+  },{n:3,rough:()=>.45,metal:()=>.7});
+}
+
+/* --- контейнер: гофра, потёртости, ржавчина --- */
+function containerSet(bc,seed,label){
+  return buildSet(512,512,(ga,gh,w,h)=>{
+    const n=fbm(w,h,4,4,4,.55,seed), f=fbm(w,h,64,64,2,.5,seed+1), st=fbm(w,h,40,2,2,.5,seed+2), ia=ga.createImageData(w,h), A=ia.data, ih=gh.createImageData(w,h), H=ih.data;
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+      const i=y*w+x,p=i*4, ph=(x%32)/32, prof=smooth(.15,.85,Math.sin(ph*Math.PI*2)*.5+.5);
+      const yy=y/h, rust=smooth(.58,.74,n[i]*.8+.4*yy*yy*yy+.12*(f[i]-.5)+(1-st[i])*.1);
+      let v=(.8+.3*prof)*(.9+.2*st[i])*(.94+.1*f[i]);
+      if(y<3||y>h-4) v*=.6;
+      let r=bc[0]*v, g=bc[1]*v, b=bc[2]*v; const rv=.55+.9*f[i]; r+=(130*rv-r)*rust; g+=(68*rv-g)*rust; b+=(38*rv-b)*rust;
+      A[p]=r; A[p+1]=g; A[p+2]=b; A[p+3]=255;
+      H[p]=H[p+1]=H[p+2]=clamp(.25+.55*prof+(f[i]-.5)*.1+rust*(f[i]-.5)*.4,0,1)*255; H[p+3]=255;
+    }
+    ga.putImageData(ia,0,0); gh.putImageData(ih,0,0);
+    ga.fillStyle='rgba(238,238,230,.55)'; ga.font='bold 40px monospace'; ga.fillText(label,90,110); ga.font='bold 22px monospace'; ga.fillText('22G1  MAX 30480 KG',90,145);
+  },{n:3.5,rough:(i,hh)=>.5+(.5-hh[i])*.3});
+}
+
+/* --- фасады зданий (окна светятся) --- */
+let FACADE_EMI=null;
+function facadeSet(){
+  const W=256,H2=512, ec=mkc(W,H2), ge=ctx2(ec); ge.fillStyle='#000'; ge.fillRect(0,0,W,H2);
+  const rng=mulberry(77), lit=[]; for(let i=0;i<8*16;i++) lit.push(rng()<.34?(.65+rng()*.35):0);
+  const wm=new Float32Array(W*H2);
+  const set=buildSet(W,H2,(ga,gh,w,h)=>{
+    const n=fbm(w,h,5,8,4,.55,71), f=fbm(w,h,60,60,2,.5,72), ia=ga.createImageData(w,h), A=ia.data, ih=gh.createImageData(w,h), H=ih.data, ie=ge.createImageData(w,h), E=ie.data;
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+      const i=y*w+x,p=i*4, cx=(x/32)|0, cy=(y/32)|0, lx=x%32, ly=y%32, L=lit[cy*8+cx];
+      let r=150*(.8+.3*n[i])*(.94+.1*f[i]), g=148*(.8+.3*n[i])*(.94+.1*f[i]), b=142*(.8+.3*n[i])*(.94+.1*f[i]), hv=.55, em=0;
+      if(ly<3){ r*=1.12; g*=1.12; b*=1.12; hv=.72; }
+      const inWin=lx>=6&&lx<26&&ly>=7&&ly<26;
+      if(inWin){
+        wm[i]=1; const fr=(lx<8||lx>=24||ly<9||ly>=24||(lx>=15&&lx<17));
+        if(fr){ r=205; g=205; b=200; hv=.62; }
+        else if(L>0){ const cur=smooth(0,10,ly-9)*.35, k=L*(1-cur); r=255*k; g=(206+30*(1-L))*k; b=(130+60*(1-L))*k; hv=.25; em=k; }
+        else { const refl=smooth(.0,1,(lx+ly)/50)*.6; r=16+22*refl; g=26+30*refl; b=40+40*refl; hv=.25; }
+      } else if(ly>=26&&ly<29&&lx>=4&&lx<28){ r=190; g=188; b=182; hv=.8; }
+      A[p]=r; A[p+1]=g; A[p+2]=b; A[p+3]=255; const hb=clamp(hv+(f[i]-.5)*.08,0,1)*255; H[p]=H[p+1]=H[p+2]=hb; H[p+3]=255;
+      E[p]=255*em; E[p+1]=(205+30*(1-em))*em; E[p+2]=(125+60*(1-em))*em; E[p+3]=255;
+    }
+    ga.putImageData(ia,0,0); gh.putImageData(ih,0,0); ge.putImageData(ie,0,0);
+  },{n:3,rough:(i)=>wm[i]>0?.12:.9});
+  FACADE_EMI=mkT(ec,true); return set;
+}
+
+/* --- кора, хвоя --- */
+function barkSet(){
+  return buildSet(256,256,(ga,gh,w,h)=>{
+    const r=fbm(w,h,14,3,3,.55,101), f=fbm(w,h,40,40,2,.5,102), l=fbm(w,h,6,6,3,.5,103), ia=ga.createImageData(w,h), A=ia.data, ih=gh.createImageData(w,h), H=ih.data;
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+      const i=y*w+x,p=i*4, ridge=1-Math.abs(2*r[i]-1), li=smooth(.64,.76,l[i]);
+      let v=.5+.75*ridge; let R=92*v*(.9+.2*f[i]), G=64*v*(.9+.2*f[i]), B=42*v*(.9+.2*f[i]);
+      R+=(120-R)*li*.5; G+=(135-G)*li*.5; B+=(80-B)*li*.5;
+      A[p]=R; A[p+1]=G; A[p+2]=B; A[p+3]=255; H[p]=H[p+1]=H[p+2]=clamp(ridge*.8+(f[i]-.5)*.2,0,1)*255; H[p+3]=255;
+    }
+    ga.putImageData(ia,0,0); gh.putImageData(ih,0,0);
+  },{n:4,rough:()=>.96});
+}
+function leafSet(){
+  return buildSet(256,256,(ga,gh,w,h)=>{
+    const n=fbm(w,h,5,5,3,.5,111), rng=mulberry(112), ia=ga.createImageData(w,h), A=ia.data, ih=gh.createImageData(w,h), H=ih.data;
+    for(let i=0;i<w*h;i++){ const p=i*4, v=.5+.7*n[i]; A[p]=26*v; A[p+1]=58*v; A[p+2]=30*v; A[p+3]=255; const hh=(.15+.2*n[i])*255; H[p]=H[p+1]=H[p+2]=hh; H[p+3]=255; }
+    ga.putImageData(ia,0,0); gh.putImageData(ih,0,0);
+    const cols=['#2d6a34','#3b7d3f','#245a2d','#4a8a45','#1f4f27'];
+    ga.lineCap='round'; gh.lineCap='round';
+    for(let k=0;k<4200;k++){
+      const x=rng()*w, y=rng()*h, a=1.2+(rng()-.5)*1.8, l=9+rng()*14, dx=Math.cos(a)*l, dy=Math.sin(a)*l, c=cols[(rng()*cols.length)|0], lum=70+rng()*160;
+      for(const ox of [-w,0,w]) for(const oy of [-h,0,h]){
+        const X=x+ox, Y=y+oy; if(X<-30||X>w+30||Y<-30||Y>h+30) continue;
+        ga.strokeStyle=c; ga.lineWidth=1.6; ga.beginPath(); ga.moveTo(X,Y); ga.lineTo(X+dx,Y+dy); ga.stroke();
+        gh.strokeStyle=`rgb(${lum|0},${lum|0},${lum|0})`; gh.lineWidth=1.6; gh.beginPath(); gh.moveTo(X,Y); gh.lineTo(X+dx,Y+dy); gh.stroke();
+      }
+    }
+  },{n:3.2,rough:()=>.85});
+}
+
+/* --- резина, площадка-батут, мячи, кегли, домино --- */
+function padSet(){
+  const ec=mkc(256,256), ge=ctx2(ec);
+  const set=buildSet(256,256,(ga,gh,w,h)=>{
+    const f=fbm(w,h,40,40,2,.5,121), n=fbm(w,h,5,5,3,.5,122), ia=ga.createImageData(w,h), A=ia.data, ih=gh.createImageData(w,h), H=ih.data;
+    for(let i=0;i<w*h;i++){ const p=i*4, v=.7+.5*n[i]; A[p]=16*v; A[p+1]=52*v; A[p+2]=28*v; A[p+3]=255; const hh=(.5+(f[i]-.5)*.3)*255; H[p]=H[p+1]=H[p+2]=hh; H[p+3]=255; }
+    ga.putImageData(ia,0,0); gh.putImageData(ih,0,0); ge.fillStyle='#000'; ge.fillRect(0,0,w,h);
+    for(const [g,col] of [[ga,'#37e872'],[ge,'#37e872']]){
+      g.strokeStyle=col; g.lineWidth=9; g.beginPath(); g.arc(128,128,112,0,7); g.stroke();
+      g.fillStyle=col; for(const dy of [0,40]){ g.beginPath(); g.moveTo(128,50+dy); g.lineTo(178,110+dy); g.lineTo(150,110+dy); g.lineTo(150,140+dy); g.lineTo(106,140+dy); g.lineTo(106,110+dy); g.lineTo(78,110+dy); g.closePath(); g.fill(); }
+    }
+    gh.fillStyle='rgb(200,200,200)'; gh.strokeStyle='rgb(200,200,200)'; gh.lineWidth=9; gh.beginPath(); gh.arc(128,128,112,0,7); gh.stroke();
+  },{n:2.5,rough:()=>.7});
+  set.emi=mkT(ec,true); return set;
+}
+function beachSet(hex){
+  return buildSet(256,128,(ga,gh,w,h)=>{
+    const f=fbm(w,h,30,15,2,.5,131), ia=ga.createImageData(w,h), A=ia.data, ih=gh.createImageData(w,h), H=ih.data, c=new THREE.Color(hex).convertLinearToSRGB();
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+      const i=y*w+x,p=i*4, pw=w/6, px=x%pw, panel=Math.floor(x/pw), seam=1-smooth(0,2.4,Math.min(px,pw-1-px)), cap=(y<10||y>h-11)?1:0, col=(panel%2===0&&!cap);
+      const v=(.95+.08*f[i])*(1-.35*seam);
+      A[p]=(col?c.r*255:245)*v; A[p+1]=(col?c.g*255:245)*v; A[p+2]=(col?c.b*255:245)*v; A[p+3]=255;
+      H[p]=H[p+1]=H[p+2]=clamp(.6-seam*.3+(f[i]-.5)*.05,0,1)*255; H[p+3]=255;
+    }
+    ga.putImageData(ia,0,0); gh.putImageData(ih,0,0);
+  },{n:2,rough:()=>.38});
+}
+function bowlSet(){
+  return buildSet(256,128,(ga,gh,w,h)=>{
+    const n=fbm(w,h,4,2,4,.55,141), f=fbm(w,h,60,30,2,.5,142), ia=ga.createImageData(w,h), A=ia.data, ih=gh.createImageData(w,h), H=ih.data;
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+      const i=y*w+x,p=i*4, s=.5+.5*Math.sin(x/w*Math.PI*2*3+n[i]*11+y*.04), t=smooth(.2,.8,s), u=.5+.5*Math.sin(n[i]*17+x/w*Math.PI*2*2);
+      A[p]=(14+110*t*u)*(.9+.2*f[i]); A[p+1]=(20+36*t+70*(1-u)*t)*(.9+.2*f[i]); A[p+2]=(60+100*t)*(.9+.2*f[i]); A[p+3]=255;
+      H[p]=H[p+1]=H[p+2]=(.5+(f[i]-.5)*.04)*255; H[p+3]=255;
+    }
+    ga.putImageData(ia,0,0); gh.putImageData(ih,0,0);
+  },{n:1,rough:()=>.1});
+}
+function pinSet(){
+  return buildSet(64,256,(ga,gh,w,h)=>{
+    const f=fbm(w,h,8,30,2,.5,151), ia=ga.createImageData(w,h), A=ia.data, ih=gh.createImageData(w,h), H=ih.data;
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+      const i=y*w+x,p=i*4, v=1-y/h, st=((v>.55&&v<.6)||(v>.65&&v<.7))?1:0, k=.94+.06*f[i];
+      A[p]=(st?196:246)*k; A[p+1]=(st?28:244)*k; A[p+2]=(st?32:238)*k; A[p+3]=255; H[p]=H[p+1]=H[p+2]=(.5+(f[i]-.5)*.05)*255; H[p+3]=255;
+    }
+    ga.putImageData(ia,0,0); gh.putImageData(ih,0,0);
+  },{n:1,rough:()=>.25});
+}
+function dominoSet(){
+  return buildSet(128,224,(ga,gh,w,h)=>{
+    const f=fbm(w,h,8,14,3,.5,161), ia=ga.createImageData(w,h), A=ia.data, ih=gh.createImageData(w,h), H=ih.data;
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+      const i=y*w+x,p=i*4, ed=Math.min(x,y,w-1-x,h-1-y), b=smooth(0,8,ed), v=(.9+.1*f[i])*(.8+.2*b);
+      A[p]=236*v; A[p+1]=228*v; A[p+2]=206*v; A[p+3]=255; H[p]=H[p+1]=H[p+2]=clamp(.6*b+.3+(f[i]-.5)*.05,0,1)*255; H[p+3]=255;
+    }
+    ga.putImageData(ia,0,0); gh.putImageData(ih,0,0);
+    ga.fillStyle='rgba(60,50,30,.7)'; ga.fillRect(14,109,100,5); gh.fillStyle='rgb(60,60,60)'; gh.fillRect(14,109,100,5);
+    const rng=mulberry(Math.random()*1e6|0), grid=[[0,0],[1,0],[2,0],[0,1],[1,1],[2,1],[0,2],[1,2],[2,2]];
+    const pat={1:[4],2:[0,8],3:[0,4,8],4:[0,2,6,8],5:[0,2,4,6,8],6:[0,2,3,5,6,8]};
+    for(const half of [0,1]){ const n=1+((rng()*6)|0); for(const k of pat[n]){ const gx=grid[k][0], gy=grid[k][1], x=34+gx*30, y=(half?138:24)+gy*28; ga.fillStyle='rgba(18,16,14,.95)'; ga.beginPath(); ga.arc(x,y,9,0,7); ga.fill(); gh.fillStyle='rgb(20,20,20)'; gh.beginPath(); gh.arc(x,y,9,0,7); gh.fill(); } }
+  },{n:3,rough:()=>.45});
+}
+
+/* --- ткани и кожа персонажа --- */
+function clothSet(kind,seed,S=128){
+  return buildSet(S,S,(ga,gh,w,h)=>{
+    const n=fbm(w,h,8,8,3,.55,seed), f=fbm(w,h,48,48,1,1,seed+1), ia=ga.createImageData(w,h), A=ia.data, ih=gh.createImageData(w,h), H=ih.data;
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+      const i=y*w+x,p=i*4; let t=0;
+      if(kind==='twill') t=((x-y)&3)<2?1:0;
+      else if(kind==='plain') t=((x>>1)+(y>>1))&1;
+      else if(kind==='rib') t=(x&3)<2?1:0;
+      else t=((x&3)<2?((y+(x>>2)*2)&7)<4:((y+4+(x>>2)*2)&7)<4)?1:0;
+      const v=.74+.2*t+(n[i]-.5)*.18+(f[i]-.5)*.12; A[p]=A[p+1]=A[p+2]=Math.min(255,v*255); A[p+3]=255;
+      const hv=(.35+.4*t+(f[i]-.5)*.3)*255; H[p]=H[p+1]=H[p+2]=hv; H[p+3]=255;
+    }
+    ga.putImageData(ia,0,0); gh.putImageData(ih,0,0);
+  },{n:2.4,rough:()=>.9});
+}
+function skinSet(S=256){
+  return buildSet(S,S,(ga,gh,w,h)=>{
+    const n=fbm(w,h,5,5,4,.5,81), po=fbm(w,h,90,90,1,1,82), fn=fbm(w,h,40,40,2,.5,84), rng=mulberry(83), ia=ga.createImageData(w,h), A=ia.data, ih=gh.createImageData(w,h), H=ih.data;
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+      const i=y*w+x,p=i*4, pore=po[i]>.72?Math.min(1,(po[i]-.72)*5):0, v=(.93+.12*n[i])*(1-.18*pore);
+      A[p]=255*v; A[p+1]=(236-6*n[i])*v; A[p+2]=(226-10*n[i])*v; A[p+3]=255;
+      H[p]=H[p+1]=H[p+2]=clamp(.55-pore*.35+(fn[i]-.5)*.12,0,1)*255; H[p+3]=255;
+    }
+    ga.putImageData(ia,0,0); gh.putImageData(ih,0,0);
+    for(let i=0;i<46;i++){ ga.fillStyle=`rgba(150,95,65,${.08+rng()*.12})`; ga.beginPath(); ga.arc(rng()*w,rng()*h,1+rng()*1.8,0,7); ga.fill(); }
+  },{n:1.3,rough:(i,hh)=>.52+(.5-hh[i])*.35});
+}
+function leatherSet(){
+  return buildSet(128,128,(ga,gh,w,h)=>{
+    const n=fbm(w,h,16,16,3,.55,171), f=fbm(w,h,32,32,1,1,172), ia=ga.createImageData(w,h), A=ia.data, ih=gh.createImageData(w,h), H=ih.data;
+    for(let i=0;i<w*h;i++){ const p=i*4, cell=1-Math.abs(2*((n[i]*5)%1)-1), v=.7+.3*cell+(f[i]-.5)*.1; A[p]=A[p+1]=A[p+2]=v*255; A[p+3]=255; const hh=(.35+.5*cell)*255; H[p]=H[p+1]=H[p+2]=hh; H[p+3]=255; }
+    ga.putImageData(ia,0,0); gh.putImageData(ih,0,0);
+  },{n:2.5,rough:()=>.6});
+}
+function packSet(){
+  return buildSet(256,256,(ga,gh,w,h)=>{
+    const n=fbm(w,h,6,6,3,.5,181), ia=ga.createImageData(w,h), A=ia.data, ih=gh.createImageData(w,h), H=ih.data;
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++){ const i=y*w+x,p=i*4, t=((x>>1)+(y>>1))&1, ed=Math.min(x,y,w-1-x,h-1-y), v=(.72+.14*t+(n[i]-.5)*.3)*(.75+.25*smooth(0,10,ed));
+      A[p]=185*v; A[p+1]=104*v; A[p+2]=34*v; A[p+3]=255; H[p]=H[p+1]=H[p+2]=(.4+.3*t+(n[i]-.5)*.1)*255; H[p+3]=255; }
+    ga.putImageData(ia,0,0); gh.putImageData(ih,0,0);
+    ga.setLineDash([7,5]); ga.strokeStyle='rgba(240,225,190,.85)'; ga.lineWidth=2.2; ga.strokeRect(16,16,w-32,h-32);
+    ga.strokeStyle='rgba(40,22,8,.6)'; ga.setLineDash([]); ga.lineWidth=3; ga.strokeRect(8,8,w-16,h-16);
+    gh.setLineDash([]); gh.strokeStyle='rgb(30,30,30)'; gh.lineWidth=3; gh.strokeRect(8,8,w-16,h-16);
+  },{n:2.4,rough:()=>.88});
+}
+function pocketSet(){
+  return buildSet(128,128,(ga,gh,w,h)=>{
+    const n=fbm(w,h,8,8,3,.55,191), ia=ga.createImageData(w,h), A=ia.data, ih=gh.createImageData(w,h), H=ih.data;
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++){ const i=y*w+x,p=i*4, t=((x-y)&3)<2?1:0, v=.78+.2*t+(n[i]-.5)*.15; A[p]=A[p+1]=A[p+2]=v*255; A[p+3]=255; H[p]=H[p+1]=H[p+2]=(.35+.4*t)*255; H[p+3]=255; }
+    ga.putImageData(ia,0,0); gh.putImageData(ih,0,0);
+    ga.setLineDash([6,4]); ga.strokeStyle='rgba(255,245,215,.95)'; ga.lineWidth=2.6; ga.beginPath(); ga.moveTo(12,12); ga.lineTo(116,12); ga.lineTo(116,78); ga.lineTo(64,116); ga.lineTo(12,78); ga.closePath(); ga.stroke();
+    gh.setLineDash([6,4]); gh.strokeStyle='rgb(220,220,220)'; gh.lineWidth=2.6; gh.beginPath(); gh.moveTo(12,12); gh.lineTo(116,12); gh.lineTo(116,78); gh.lineTo(64,116); gh.lineTo(12,78); gh.closePath(); gh.stroke();
+  },{n:2.4,rough:()=>.9});
+}
+function gauzeSet(){
+  return buildSet(128,128,(ga,gh,w,h)=>{
+    const n=fbm(w,h,8,8,3,.5,201), ia=ga.createImageData(w,h), A=ia.data, ih=gh.createImageData(w,h), H=ih.data;
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++){ const i=y*w+x,p=i*4, t=((x>>1)+(y>>1))&1, wrap=1-.12*smooth(0,3,Math.abs(((x+y*.5)%32)-16)), v=(.86+.1*t+(n[i]-.5)*.1)*wrap; A[p]=244*v; A[p+1]=241*v; A[p+2]=232*v; A[p+3]=255; H[p]=H[p+1]=H[p+2]=(.4+.35*t+(1-wrap)*1)*255; H[p+3]=255; }
+    ga.putImageData(ia,0,0); gh.putImageData(ih,0,0);
+  },{n:2.4,rough:()=>.95});
+}
+function hairSet(){
+  let alphaCanvas=null;
+  const set=buildSet(512,256,(ga,gh,w,h)=>{
+    const s1=fbm(w,h,110,2,2,.5,211), s2=fbm(w,h,40,3,2,.5,212), rg=fbm(w,h,60,6,2,.5,213), n=fbm(w,h,8,4,3,.5,214), ia=ga.createImageData(w,h), A=ia.data, ih=gh.createImageData(w,h), H=ih.data;
+    alphaCanvas=mkc(w,h); const gal=ctx2(alphaCanvas), al=gal.createImageData(w,h), AL=al.data;
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+      const i=y*w+x,p=i*4, u=x/w, d=Math.min(u,1-u), v=1-y/h;
+      const edge=.26+.7*smooth(.04,.5,d)+(rg[i]-.5)*.07; const a=(1-v)<edge?255:0;
+      const sh=.45+.9*s1[i]+.3*(s2[i]-.5), hi=smooth(.7,.9,s1[i]);
+      A[p]=(64+60*hi)*sh*(.85+.3*n[i]); A[p+1]=(40+36*hi)*sh*(.85+.3*n[i]); A[p+2]=(26+20*hi)*sh*(.85+.3*n[i]); A[p+3]=255;
+      H[p]=H[p+1]=H[p+2]=clamp(.3+.6*s1[i],0,1)*255; H[p+3]=255;
+      AL[p]=AL[p+1]=AL[p+2]=a; AL[p+3]=255;
+    }
+    ga.putImageData(ia,0,0); gh.putImageData(ih,0,0); gal.putImageData(al,0,0);
+  },{n:3,rough:(i,hh)=>.42+(.5-hh[i])*.3});
+  set.alpha=mkT(alphaCanvas,false); return set;
+}
+
+/* ================= СОЗДАНИЕ НАБОРОВ И МАТЕРИАЛОВ ================= */
+const S_floor=concreteSet(1024,{base:[150,152,154],slabs:2,seed:11,cracks:6,stains:true,n:4.5});
+const S_wall=concreteSet(512,{base:[118,124,130],slabs:2,seed:21,streaks:true,tieHoles:true,cracks:2,n:4});
+const S_conc2=concreteSet(512,{base:[170,164,153],slabs:1,seed:31,cracks:3,n:5,groove:2.4});
+const S_hazard=hazardSet();
+const S_metal=metalSet(512,{base:[134,140,150],panels:2,rivets:true,seed:41,rust:.22});
+const S_steel=metalSet(256,{base:[72,78,86],seed:51,rust:.08});
+const S_hammer=metalSet(256,{base:[92,98,108],seed:61,rust:0,scr:70,rr:.06});
+const S_rust=metalSet(256,{base:[120,70,45],seed:71,rust:1});
+const S_dark=metalSet(256,{base:[52,38,34],seed:72,rust:.55,panels:2});
+const S_wood=woodSet(), S_belt=beltSet(), S_card=cardSet(), S_brick=brickSet(), S_barrel=barrelSet(), S_barrelCap=barrelCapSet();
+const S_paint=paintSet(256,[236,238,240],88);
+const S_bark=barkSet(), S_leaf=leafSet(), S_pad=padSet(), S_bowl=bowlSet(), S_pin=pinSet(), S_domino=dominoSet();
+const S_facade=facadeSet();
+const S_cont=[['#b3392b',[179,57,43],'MSCU 482'],['#2a5d9f',[42,93,159],'HLXU 719'],['#3d7a4a',[61,122,74],'TGHU 305'],['#c9a227',[201,162,39],'OOLU 960']].map((c,i)=>containerSet(c[1],301+i*7,c[2]));
+
+const std=(o)=>new THREE.MeshStandardMaterial(o);
+const M={
+  floor:pbr(S_floor,{ns:1}), wall:pbr(S_wall), conc2:pbr(S_conc2),
+  metal:pbr(S_metal), steel:pbr(S_steel), hazard:pbr(S_hazard), wood:pbr(S_wood), hammer:pbr(S_hammer),
+  rubber:std({color:0x151515,roughness:.9}), white:pbr(S_paint),
+  green:std({color:0x18b84a,emissive:0x0b7a2a,emissiveIntensity:1.2,roughness:.4}),
+  red:std({color:0x8a1010,emissive:0xff2010,emissiveIntensity:.2,roughness:.5}),
+  dark:pbr(S_dark), rust:pbr(S_rust),
+  card:pbr(S_card), brick:pbr(S_brick),
+  barrel:[pbr(S_barrel),pbr(S_barrelCap),pbr(S_barrelCap)],
+  bark:pbr(S_bark), leaf:pbr(S_leaf), leaf2:pbr(S_leaf,{color:0xc4e8a6}),
+  lampHead:std({color:0xfff2c0,emissive:0xffe9a0,emissiveIntensity:1.6}),
+  ball:pbr(beachSet(0xe8553c),{phys:true,extra:{clearcoat:.5,clearcoatRoughness:.25}}), ball2:pbr(beachSet(0x3c8be8),{phys:true,extra:{clearcoat:.5,clearcoatRoughness:.25}}),
+  pin:pbr(S_pin,{phys:true,extra:{clearcoat:1,clearcoatRoughness:.08}}), domFace:pbr(S_domino), domEdge:std({color:0xe9e2d0,roughness:.45}),
+  bowl:pbr(S_bowl,{phys:true,extra:{clearcoat:1,clearcoatRoughness:.04}}),
+  padTop:std({map:S_pad.map,normalMap:S_pad.normal,roughnessMap:S_pad.orm,roughness:1,emissiveMap:S_pad.emi,emissive:0xffffff,emissiveIntensity:1.25}),
+  padSide:pbr(S_steel),
+  glass:std({color:0x10161e,roughness:.06,metalness:.4}),
+  bld:std({map:S_facade.map,normalMap:S_facade.normal,roughnessMap:S_facade.orm,roughness:1,emissiveMap:FACADE_EMI,emissive:0xffffff,emissiveIntensity:.95,color:0xc4c8d0})
+};
+const CONT=S_cont.map(s=>pbr(s));
+const BOWL_HOLE=std({color:0x050505,roughness:.6});
+
+/* ================= BUILD HELPERS ================= */
+function boxGeo(w,h,d,tile){
+  const g=new THREE.BoxGeometry(w,h,d);
+  if(tile){ const uv=g.attributes.uv, dims=[[d,h],[d,h],[w,d],[w,d],[w,h],[w,h]];
+    for(let f=0;f<6;f++) for(let i=0;i<4;i++){ const k=f*4+i; uv.setXY(k,uv.getX(k)*dims[f][0]/tile,uv.getY(k)*dims[f][1]/tile); } }
+  return g;
+}
+function scaleUV(g,su,sv){ const uv=g.attributes.uv; for(let i=0;i<uv.count;i++) uv.setXY(i,uv.getX(i)*su,uv.getY(i)*sv); return g; }
+function cylGeo(rt,rb,h,seg,tile,open=false){
+  const g=new THREE.CylinderGeometry(rt,rb,h,seg,1,open);
+  return scaleUV(g,Math.max(1,Math.round(Math.PI*2*Math.max(rt,rb)/tile)),h/tile);
+}
+function sBox(x,y,z,w,h,d,mat,o={}){
+  const m=new THREE.Mesh(boxGeo(w,h,d,o.tile===undefined?3:o.tile),mat);
+  m.position.set(x,y,z); if(o.rot) m.quaternion.copy(o.rot);
+  m.castShadow=o.cast!==false; m.receiveShadow=true; (o.parent||scene).add(m);
+  if(o.col!==false && !o.parent){
+    const cd=RAPIER.ColliderDesc.cuboid(w/2,h/2,d/2).setTranslation(x,y,z).setFriction(o.fr||0.9).setRestitution(0);
+    if(o.rot) cd.setRotation({x:o.rot.x,y:o.rot.y,z:o.rot.z,w:o.rot.w});
+    world.createCollider(cd);
+  }
+  return m;
+}
+function label(text,x,y,z,sc=1,col='#ffd23f'){
+  const c=document.createElement('canvas'); c.width=512; c.height=128; const g=c.getContext('2d');
+  g.fillStyle='rgba(10,10,14,.78)'; g.fillRect(6,6,500,116); g.strokeStyle=col; g.lineWidth=5; g.strokeRect(6,6,500,116);
+  g.fillStyle=col; g.font='bold 52px Arial'; g.textAlign='center'; g.textBaseline='middle'; g.fillText(text,256,68);
+  const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; t.anisotropy=4;
+  const s=new THREE.Sprite(new THREE.SpriteMaterial({map:t,transparent:true,depthWrite:false,fog:false}));
+  s.position.set(x,y,z); s.scale.set(4*sc,sc,1); scene.add(s); return s;
+}
+function ramp(o){
+  const hyp=Math.hypot(o.len,o.h), a=Math.atan2(o.h,o.len), thick=0.5, q=new THREE.Quaternion();
+  let cx=o.x, cz=o.z, dims;
+  if(o.dir==='+z'||o.dir==='-z'){ const s=o.dir==='+z'?1:-1; q.setFromEuler(new THREE.Euler(-s*a,0,0)); cz=o.z+s*o.len/2; dims=[o.w,thick,hyp]; }
+  else { const s=o.dir==='+x'?1:-1; q.setFromEuler(new THREE.Euler(0,0,s*a)); cx=o.x+s*o.len/2; dims=[hyp,thick,o.w]; }
+  const n=new THREE.Vector3(0,1,0).applyQuaternion(q);
+  sBox(cx-n.x*thick/2,o.h/2-n.y*thick/2,cz-n.z*thick/2,dims[0],dims[1],dims[2],o.mat||M.conc2,{rot:q,tile:2});
+}
+const X_AXIS=new THREE.Vector3(1,0,0), Y_AXIS=new THREE.Vector3(0,1,0), Z_AXIS=new THREE.Vector3(0,0,1);
+
+const hazards=[], shredders=[], presses=[], pads=[], dynProps=[], updaters=[], conveyors=[], spikeZones=[];
+let elevator=null, medic=null;
+
+/* ================= LEVEL ================= */
+sBox(0,-0.5,0,150,1,150,M.floor,{tile:8,fr:1});
+for(const [x,z,w,d] of [[0,-74,150,2],[0,74,150,2],[-74,0,2,150],[74,0,2,150]]) sBox(x,5,z,w,10,d,M.wall,{tile:4});
+// разметка зоны старта
+sBox(0,0.012,0,8,0.02,8,M.hazard,{col:false,tile:2});
+sBox(0,0.026,0,6.6,0.02,6.6,M.floor,{col:false,tile:8});
+label('СПАВН',0,3.4,-4,0.9,'#8be9ff');
+
+/* --- Силуэт города за стенами --- */
+for(let i=0;i<46;i++){
+  const a=i/46*Math.PI*2+srnd()*0.1, r=95+srnd()*50, w=10+srnd()*18, d=10+srnd()*18, h=22+srnd()*70;
+  const m=new THREE.Mesh(boxGeo(w,h,d,10),M.bld); m.position.set(Math.cos(a)*r,h/2-1,Math.sin(a)*r); m.rotation.y=srnd()*3; scene.add(m);
+  const roof=new THREE.Mesh(boxGeo(w*0.45,2.4,d*0.4,3),M.metal); roof.position.set(Math.cos(a)*r,h-1+1.2,Math.sin(a)*r); roof.rotation.y=m.rotation.y; scene.add(roof);
+}
+
+/* --- Медпункт --- */
+{
+  const g=new THREE.Group(); g.position.set(-9,0,-5); scene.add(g);
+  const add=(geo,mat,x,y,z,cast=true)=>{ const m=new THREE.Mesh(geo,mat); m.position.set(x,y,z); m.castShadow=cast; m.receiveShadow=true; g.add(m); return m; };
+  add(boxGeo(3,2.2,1.6,1.5),M.white,0,1.1,0);
+  add(boxGeo(3.14,0.14,1.74,1.5),M.steel,0,0.07,0);
+  add(boxGeo(3.12,0.12,1.72,1.5),M.metal,0,2.26,0);
+  add(boxGeo(1.0,0.32,0.06,1),M.green,0,1.55,0.82,false); add(boxGeo(0.32,1.0,0.06,1),M.green,0,1.55,0.82,false);
+  add(boxGeo(0.95,1.65,0.05,1.2),M.steel,-0.95,0.98,0.82); add(boxGeo(0.07,0.26,0.07,1),M.metal,-0.62,1.0,0.88);
+  add(boxGeo(0.95,0.72,0.03,1),M.glass,0.9,1.0,0.81,false);
+  for(const s of [-1,1]) add(boxGeo(0.06,0.76,0.05,1),M.steel,0.9+s*0.5,1.0,0.82,false);
+  add(boxGeo(1.0,0.06,0.05,1),M.steel,0.9,1.4,0.82,false); add(boxGeo(1.0,0.06,0.05,1),M.steel,0.9,0.62,0.82,false);
+  for(let i=0;i<5;i++) add(boxGeo(0.55,0.025,0.03,1),M.steel,-1.2,1.95-i*0.07,0.82,false);
+  add(new THREE.CylinderGeometry(0.14,0.16,0.18,16),M.green,1.1,2.4,-0.2,false);
+  const lamp=new THREE.PointLight(0x30ff80,6,9); lamp.position.set(0,2.6,1.5); g.add(lamp);
+  world.createCollider(RAPIER.ColliderDesc.cuboid(1.5,1.1,0.8).setTranslation(-9,1.1,-5));
+  label('МЕДПУНКТ — держи E',-9,3.4,-5,0.9,'#5aff9a');
+  medic={pos:new THREE.Vector3(-9,0,-3.4)};
+  sBox(-5.6,0.3,-3.2,2,0.1,0.5,M.wood,{tile:1.2}); for(const s of [-1,1]) sBox(-5.6+s*0.85,0.13,-3.2,0.1,0.26,0.44,M.steel,{tile:1});
+}
+
+/* --- Катапульты (батуты) --- */
+function makePad(x,z,power,text){
+  const g=new THREE.Group(); g.position.set(x,0,z); scene.add(g);
+  const base=new THREE.Mesh(cylGeo(1.25,1.35,0.14,36,0.8),M.steel); base.position.y=0.07; base.receiveShadow=true; base.castShadow=true; g.add(base);
+  const top=new THREE.Mesh(new THREE.CylinderGeometry(1.0,1.0,0.06,40),[M.padSide,M.padTop,M.padSide]); top.position.y=0.17; top.receiveShadow=true; g.add(top);
+  for(let i=0;i<12;i++){ const a=i/12*Math.PI*2; const bolt=new THREE.Mesh(new THREE.CylinderGeometry(0.035,0.035,0.03,8),M.metal); bolt.position.set(Math.cos(a)*1.17,0.15,Math.sin(a)*1.17); g.add(bolt); }
+  world.createCollider(RAPIER.ColliderDesc.cylinder(0.07,1.3).setTranslation(x,0.07,z));
+  label(text,x,2.4,z,0.8,'#7dff9b');
+  pads.push({x,z,r:1.05,power,cool:0,top});
+}
+makePad(-4,-20,9,'ПРЫЖОК ~4 м'); makePad(0,-20,13,'ПРЫЖОК ~9 м'); makePad(4,-20,18,'ПРЫЖОК ~17 м'); makePad(8,-20,24,'ПРЫЖОК ~29 м ☠');
+
+/* --- Лестничная башня 10 м + каскад площадок --- */
+for(let i=0;i<50;i++){ const top=0.2*(i+1); sBox(14+0.4*i+0.2,top/2,40,0.4,top,3.6,M.conc2,{tile:2}); }
+sBox(40,5,40,12,10,12,M.conc2,{tile:3});
+sBox(49,3.5,40,6,7,12,M.wall,{tile:3});
+sBox(54.75,2.25,40,5.5,4.5,12,M.conc2,{tile:3});
+sBox(59.75,1.1,40,4.5,2.2,12,M.wall,{tile:3});
+sBox(34.1,10.25,40,0.3,0.5,12,M.hazard,{col:false,tile:1.2});
+label('10 м',37,11.6,34.4,0.8); label('7 м',48,8.6,34.4,0.7); label('4.5 м',54,6.1,34.4,0.7); label('2.2 м',60,3.7,34.4,0.7);
+label('ЛЕСТНИЦА → 10 м',14,3.2,40,0.8,'#8be9ff');
+
+/* --- Башня с лифтом 30 м --- */
+sBox(48,15,-30,10,30,10,M.wall,{tile:3});
+for(let y=4;y<29;y+=4) for(let k=-1;k<=1;k++){ sBox(42.97,y,-30+k*3,0.06,1.6,1.6,M.steel,{col:false,cast:false,tile:1.6}); }
+label('30 м',46,32.2,-24.6,1.2,'#ff6b5a');
+label('ЛИФТ ↑ 30 м',40,3.2,-34,0.8,'#8be9ff');
+{
+  const ex=41.5, ez=-30;
+  const grp=new THREE.Group(); scene.add(grp);
+  const plat=new THREE.Mesh(boxGeo(3,0.4,3.2,2),M.metal); plat.castShadow=plat.receiveShadow=true; grp.add(plat);
+  for(const s of [-1,1]){ const r=new THREE.Mesh(boxGeo(3,0.9,0.1,1.2),M.hazard); r.position.set(0,0.65,s*1.55); r.castShadow=true; grp.add(r); }
+  for(const s of [-1,1]){ const p=new THREE.Mesh(boxGeo(0.12,1.1,0.12,1),M.steel); p.position.set(s*1.44,0.7,0); grp.add(p); }
+  const rb=world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(ex,-0.2,ez));
+  world.createCollider(RAPIER.ColliderDesc.cuboid(1.5,0.2,1.6).setFriction(1),rb);
+  for(const s of [-1,1]) world.createCollider(RAPIER.ColliderDesc.cuboid(1.5,0.45,0.05).setTranslation(0,0.65,s*1.55),rb);
+  for(const s of [-1,1]) sBox(ex-1.7,15,ez+s*1.9,0.2,30,0.2,M.steel,{tile:1.5}); // направляющие
+  elevator={x:ex,z:ez,w:3,d:3.2,top:0,prevTop:0,dy:0,
+    update(dt,t){
+      const T=5+10+6+10; const tt=t%T; let f;
+      if(tt<5) f=0; else if(tt<15) f=smooth(0,1,(tt-5)/10); else if(tt<21) f=1; else f=1-smooth(0,1,(tt-21)/10);
+      this.prevTop=this.top; this.top=30*f; this.dy=this.top-this.prevTop;
+      rb.setNextKinematicTranslation({x:ex,y:this.top-0.2,z:ez}); grp.position.set(ex,this.top-0.2,ez);
+    }};
+  updaters.push((dt,t)=>elevator.update(dt,t));
+}
+
+/* --- Динамические предметы --- */
+const geoCache={};
+function dynBox(x,y,z,w,h,d,mat,dens=110,o={}){
+  const key=w+'_'+h+'_'+d; const geo=geoCache[key]||(geoCache[key]=new THREE.BoxGeometry(w,h,d));
+  const m=new THREE.Mesh(geo,mat); m.castShadow=m.receiveShadow=true; scene.add(m);
+  const rb=world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(x,y,z).setRotation(new THREE.Quaternion().setFromAxisAngle(Y_AXIS,o.ry||0)).setLinearDamping(0.1).setAngularDamping(0.4));
+  world.createCollider(RAPIER.ColliderDesc.cuboid(w/2,h/2,d/2).setDensity(dens).setFriction(0.8).setRestitution(0.1),rb);
+  dynProps.push({mesh:m,body:rb});
+}
+function dynCyl(x,y,z,r,h,mat,dens=90){
+  const key='c'+r+'_'+h; const geo=geoCache[key]||(geoCache[key]=new THREE.CylinderGeometry(r,r,h,24));
+  const m=new THREE.Mesh(geo,mat); m.castShadow=m.receiveShadow=true; scene.add(m);
+  const rb=world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(x,y,z).setLinearDamping(0.1).setAngularDamping(0.5));
+  world.createCollider(RAPIER.ColliderDesc.cylinder(h/2,r).setDensity(dens).setFriction(0.7).setRestitution(0.15),rb);
+  dynProps.push({mesh:m,body:rb});
+}
+function dynPin(x,y,z){
+  let geo=geoCache.pin; if(!geo){
+    const prof=[[.0001,0],[.062,0],[.075,.04],[.1,.14],[.12,.26],[.11,.4],[.075,.55],[.052,.66],[.048,.72],[.058,.8],[.07,.86],[.065,.92],[.04,.97],[.0001,1]].map(([r,yy])=>new THREE.Vector2(r,yy*0.8-0.4));
+    geo=geoCache.pin=new THREE.LatheGeometry(prof,24); }
+  const m=new THREE.Mesh(geo,M.pin); m.castShadow=m.receiveShadow=true; scene.add(m);
+  const rb=world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(x,y,z).setLinearDamping(0.1).setAngularDamping(0.5));
+  world.createCollider(RAPIER.ColliderDesc.cylinder(0.4,0.12).setDensity(70).setFriction(0.7).setRestitution(0.15),rb);
+  dynProps.push({mesh:m,body:rb});
+}
+function dynBall(x,y,z,r,mat,dens=40,rest=0.55,holes=false){
+  const key='s'+r; const geo=geoCache[key]||(geoCache[key]=new THREE.SphereGeometry(r,40,28));
+  const m=new THREE.Mesh(geo,mat); m.castShadow=m.receiveShadow=true; scene.add(m);
+  if(holes) for(const d of [[-.2,1,.18],[0,1,.34],[.2,1,.18]]){
+    const dir=new THREE.Vector3(...d).normalize(), h=new THREE.Mesh(new THREE.CylinderGeometry(r*0.07,r*0.07,r*0.08,14),BOWL_HOLE);
+    h.position.copy(dir).multiplyScalar(r*0.995); h.quaternion.setFromUnitVectors(Y_AXIS,dir); m.add(h); }
+  const rb=world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(x,y,z).setLinearDamping(0.12).setAngularDamping(0.3));
+  world.createCollider(RAPIER.ColliderDesc.ball(r).setDensity(dens).setFriction(0.6).setRestitution(rest),rb);
+  dynProps.push({mesh:m,body:rb});
+}
+const crate=(x,y,z,s=1)=>dynBox(x,y,z,s,s,s,M.wood,110);
+for(let i=0;i<4;i++) for(let j=0;j<4-i;j++) crate(7+j*1.02+i*0.5,0.5+i*1.02,6,1);
+for(let i=0;i<3;i++) for(let j=0;j<3;j++) crate(-24+i*1.3,0.5,22+j*1.3,1);
+crate(-22.4,1.6,23.4,1); crate(-23.2,1.6,22.4,0.9);
+
+/* ================= ОПАСНОСТИ ================= */
+const _v1=new THREE.Vector3(), _v2=new THREE.Vector3(), _q1=new THREE.Quaternion();
+
+/* --- Портал-рама для молотов --- */
+function gantry(z,y){
+  for(const s of [-1,1]){
+    sBox(s*5.3,y/2,z,0.5,y,0.7,M.steel,{tile:1.5});
+    sBox(s*5.3,0.15,z,1.1,0.3,1.3,M.conc2,{tile:1.5});
+    for(const dx of [-1,1]) for(const dz of [-1,1]){ const b=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,0.1,8),M.metal); b.position.set(s*5.3+dx*0.4,0.35,z+dz*0.5); scene.add(b); }
+  }
+  sBox(0,y+0.2,z,11.1,0.5,0.8,M.metal,{tile:2});
+  sBox(0,y-0.2,z,11.1,0.12,0.5,M.hazard,{col:false,tile:1});
+}
+
+/* --- Маятниковый молот / шар --- */
+function makePendulum(o){
+  const piv=new THREE.Vector3(o.x,o.y,o.z), axis=o.axis==='x'?X_AXIS:Z_AXIS, L=o.L;
+  const root=new THREE.Group(); root.position.copy(piv); scene.add(root);
+  const arm=new THREE.Group(); root.add(arm);
+  const cap=new THREE.Mesh(cylGeo(0.28,0.28,0.5,24,0.6),M.steel); cap.castShadow=true;
+  cap.rotation.z = o.axis==='x'?Math.PI/2:0; cap.rotation.x = o.axis==='x'?0:Math.PI/2; root.add(cap);
+  const rb=world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(piv.x,piv.y,piv.z));
+  world.createCollider(RAPIER.ColliderDesc.cuboid(0.075,L/2,0.075).setTranslation(0,-L/2,0),rb);
+  let hx=0,hy=0,hz=0;
+  if(o.ball){
+    // цепь из звеньев
+    const linkGeo=new THREE.TorusGeometry(0.075,0.02,8,16); linkGeo.scale(1,1.55,1);
+    const nL=Math.floor((L-o.R)/0.15), chain=new THREE.InstancedMesh(linkGeo,M.steel,nL); chain.castShadow=true;
+    const m4=new THREE.Matrix4(), qq=new THREE.Quaternion(), pp=new THREE.Vector3(), ss=new THREE.Vector3(1,1,1);
+    for(let i=0;i<nL;i++){ pp.set(0,-0.12-i*0.15,0); qq.setFromAxisAngle(Y_AXIS,(i%2)*Math.PI/2); m4.compose(pp,qq,ss); chain.setMatrixAt(i,m4); }
+    arm.add(chain);
+    const ball=new THREE.Mesh(new THREE.SphereGeometry(o.R,48,32),M.hammer); ball.position.y=-L; ball.castShadow=true; arm.add(ball);
+    const eye=new THREE.Mesh(new THREE.TorusGeometry(o.R*0.2,o.R*0.06,10,20),M.steel); eye.position.y=-L+o.R*1.02; arm.add(eye);
+    for(let i=0;i<14;i++){ const sp=new THREE.Mesh(new THREE.ConeGeometry(0.1,0.28,12),M.steel); const a=Math.acos(1-2*(i+.5)/14), b=i*2.399963; sp.position.set(Math.sin(a)*Math.cos(b),Math.cos(a),Math.sin(a)*Math.sin(b)).multiplyScalar(o.R+0.1); sp.quaternion.setFromUnitVectors(Y_AXIS,sp.position.clone().normalize()); sp.position.y-=L; sp.castShadow=true; arm.add(sp); }
+    world.createCollider(RAPIER.ColliderDesc.ball(o.R).setTranslation(0,-L,0).setRestitution(0.2),rb);
+  } else {
+    [hx,hy,hz]=o.hs;
+    const rod=new THREE.Mesh(cylGeo(0.07,0.07,L,14,1.2),M.metal); rod.position.y=-L/2; rod.castShadow=true; arm.add(rod);
+    for(const yy of [-0.6,-L+hy+0.5]){ const c=new THREE.Mesh(cylGeo(0.12,0.12,0.14,16,0.5),M.steel); c.position.y=yy; arm.add(c); }
+    const head=new THREE.Mesh(new RoundedBoxGeometry(hx*2,hy*2,hz*2,3,Math.min(hx,hy,hz)*0.28),M.hammer); head.position.y=-L; head.castShadow=true; arm.add(head);
+    const tx = o.axis==='z'; // тангенциальная ось головы
+    for(const s of [-1,1]){ const f=new THREE.Mesh(boxGeo(tx?0.1:hx*2+0.04,hy*2+0.06,tx?hz*2+0.04:0.1,0.8),M.rust); f.position.set(tx?s*(hx-0.05):0,-L,tx?0:s*(hz-0.05)); f.castShadow=true; arm.add(f); }
+    const st=new THREE.Mesh(boxGeo(hx*2+0.02,0.12,hz*2+0.02,1),M.hazard); st.position.y=-L+hy*0.55; arm.add(st);
+    world.createCollider(RAPIER.ColliderDesc.cuboid(hx,hy,hz).setTranslation(0,-L,0).setRestitution(0.1).setFriction(0.8),rb);
+  }
+  const q=new THREE.Quaternion(), out=new THREE.Vector3(), wv=new THREE.Vector3(), rv=new THREE.Vector3(), lv=new THREE.Vector3();
+  const h={kind:'hammer',cd:0,w:0,px:piv.x,pz:piv.z,
+    update(dt,t){
+      const a=o.omega*t+o.phase; const th=o.amp*Math.sin(a); this.w=o.amp*o.omega*Math.cos(a);
+      q.setFromAxisAngle(axis,th); arm.quaternion.copy(q); rb.setNextKinematicRotation({x:q.x,y:q.y,z:q.z,w:q.w});
+    },
+    hit(p,r){
+      lv.copy(p).sub(piv).applyQuaternion(_q1.copy(q).invert());
+      let inside;
+      if(o.ball){ lv.y+=L; inside=lv.length()<o.R+r; }
+      else inside=Math.abs(lv.x)<hx+r&&Math.abs(lv.y+L)<hy+r&&Math.abs(lv.z)<hz+r;
+      if(!inside) return null;
+      wv.copy(axis).multiplyScalar(this.w); rv.copy(p).sub(piv); return out.crossVectors(wv,rv);
+    }};
+  hazards.push(h); updaters.push((dt,t)=>h.update(dt,t));
+  return h;
+}
+// Коридор маятниковых молотов
+sBox(-4.6,2,30,0.8,4,40,M.wall,{tile:3}); sBox(4.6,2,30,0.8,4,40,M.wall,{tile:3});
+sBox(0,0.012,11.5,8.4,0.02,1.6,M.hazard,{col:false,tile:2});
+label('⚠ КОРИДОР МОЛОТОВ',0,5.2,10,1,'#ff6b5a');
+for(const z of [18,26,34,42]) gantry(z,7);
+makePendulum({x:0,y:7,z:18,axis:'z',L:5.5,hs:[0.65,0.32,0.4],amp:0.62,omega:2.2,phase:0});
+makePendulum({x:0,y:7,z:26,axis:'x',L:6.2,hs:[0.4,0.3,0.7],amp:0.62,omega:2.4,phase:1.5});
+makePendulum({x:0,y:7,z:34,axis:'z',L:6.5,hs:[0.7,0.3,0.4],amp:0.58,omega:2.1,phase:3});
+makePendulum({x:0,y:7,z:42,axis:'x',L:6.0,ball:true,R:0.65,amp:0.72,omega:2.0,phase:0.7});
+
+/* --- Вращающийся «свипер» --- */
+function makeSweeper(cx,cz,w,len,text){
+  const grp=new THREE.Group(); grp.position.set(cx,0,cz); scene.add(grp);
+  const base=new THREE.Mesh(cylGeo(1.2,1.5,0.5,32,0.8),M.steel); base.position.y=0.25; base.castShadow=base.receiveShadow=true; grp.add(base);
+  const post=new THREE.Mesh(cylGeo(0.25,0.25,2.2,20,0.6),M.metal); post.position.y=1.1; post.castShadow=true; grp.add(post);
+  const hub=new THREE.Mesh(cylGeo(0.42,0.42,0.25,20,0.6),M.steel); hub.position.y=0.5; grp.add(hub);
+  const spin=new THREE.Group(); grp.add(spin);
+  const bars=[{y:0.5,len,h:0.32,w:0.34,rot:0},{y:1.35,len,h:0.32,w:0.34,rot:Math.PI/2}];
+  const rb=world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(cx,0,cz));
+  for(const b of bars){
+    const m=new THREE.Mesh(boxGeo(b.len*2,b.h,b.w,1.2),M.hazard); m.position.y=b.y; m.rotation.y=b.rot; m.castShadow=true; spin.add(m);
+    for(const s of [-1,1]){ const cp=new THREE.Mesh(boxGeo(0.12,b.h+0.06,b.w+0.06,0.8),M.rubber); cp.position.set(s*b.len,0,0); m.add(cp); }
+    const qq=new THREE.Quaternion().setFromAxisAngle(Y_AXIS,b.rot);
+    world.createCollider(RAPIER.ColliderDesc.cuboid(b.len,b.h/2,b.w/2).setTranslation(0,b.y,0).setRotation({x:qq.x,y:qq.y,z:qq.z,w:qq.w}).setFriction(0.6),rb);
+  }
+  label(text,cx,3.4,cz,0.9,'#ff6b5a');
+  const q=new THREE.Quaternion(), out=new THREE.Vector3(), lv=new THREE.Vector3(), rv=new THREE.Vector3();
+  let ang=0;
+  const h={kind:'sweeper',cd:0,px:cx,pz:cz,w,
+    update(dt){ ang+=w*dt; q.setFromAxisAngle(Y_AXIS,ang); spin.quaternion.copy(q); rb.setNextKinematicRotation({x:q.x,y:q.y,z:q.z,w:q.w}); },
+    hit(p,r){
+      lv.set(p.x-cx,p.y,p.z-cz).applyQuaternion(_q1.copy(q).invert());
+      for(const b of bars){
+        const A=b.rot===0;
+        if(Math.abs(lv.y-b.y)<b.h/2+r && (A?Math.abs(lv.x)<b.len+r&&Math.abs(lv.z)<b.w/2+r:Math.abs(lv.z)<b.len+r&&Math.abs(lv.x)<b.w/2+r)){
+          rv.set(p.x-cx,0,p.z-cz); return out.set(0,w,0).cross(rv);
+        }
+      }
+      return null;
+    }};
+  hazards.push(h); updaters.push((dt)=>h.update(dt));
+}
+makeSweeper(-30,30,1.7,4.2,'⚠ СВИПЕР');
+makeSweeper(46,12,-2.3,3.4,'⚠ БЫСТРЫЙ СВИПЕР');
+
+/* --- Гидравлические прессы --- */
+function makePress(cx,cz,offset){
+  const S=3.2,TH=0.8,TOP=5.9,BOT=0.04,HT=7.6;
+  for(const sx of [-1,1]) for(const sz of [-1,1]){ sBox(cx+sx*2.3,HT/2,cz+sz*2.3,0.45,HT,0.45,M.steel,{tile:1.5}); sBox(cx+sx*2.3,0.12,cz+sz*2.3,0.9,0.24,0.9,M.conc2,{tile:1}); }
+  sBox(cx,HT+0.4,cz,5.4,0.8,5.4,M.metal,{tile:2});
+  sBox(cx,0.015,cz,S+1.2,0.03,S+1.2,M.hazard,{col:false,tile:2});
+  const cyl=new THREE.Mesh(cylGeo(0.5,0.5,0.9,24,0.8),M.steel); cyl.position.set(cx,HT+1.25,cz); cyl.castShadow=true; scene.add(cyl);
+  const lamp=new THREE.Mesh(new THREE.SphereGeometry(0.2,16,12),M.red.clone()); lamp.position.set(cx,HT+0.4,cz+2.8); scene.add(lamp);
+  const grp=new THREE.Group(); scene.add(grp);
+  const plate=new THREE.Mesh(new RoundedBoxGeometry(S,TH,S,3,0.07),M.hammer); plate.castShadow=plate.receiveShadow=true; grp.add(plate);
+  const strip=new THREE.Mesh(boxGeo(S+0.02,0.2,S+0.02,1.2),M.hazard); strip.position.y=0.3; grp.add(strip);
+  for(const sx of [-1,1]) for(const sz of [-1,1]){ const bt=new THREE.Mesh(new THREE.CylinderGeometry(0.09,0.09,0.06,6),M.steel); bt.position.set(sx*1.4,TH/2+0.03,sz*1.4); grp.add(bt); }
+  const rods=[]; for(const s of [-0.9,0.9]){ const r=new THREE.Mesh(cylGeo(0.18,0.18,1,16,1.2),M.metal); r.position.x=s; r.castShadow=true; grp.add(r); rods.push(r); }
+  const rb=world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(cx,TOP+TH/2,cz));
+  world.createCollider(RAPIER.ColliderDesc.cuboid(S/2,TH/2,S/2).setCollisionGroups(((0x4000<<16)|NOSELF_FILTER)>>>0).setFriction(0.8),rb);
+  const out=new THREE.Vector3();
+  const p={kind:'press',cd:0,yb:TOP,prevYb:TOP,vy:0,ph:0,cx,cz,
+    update(dt,t){
+      const T=7.17; let tt=(((t+offset)%T)+T)%T, yb, ph;
+      if(tt<3.0){ph=0;yb=TOP;} else if((tt-=3.0)<1.1){ph=1;yb=TOP+0.04*Math.sin(t*70);}
+      else if((tt-=1.1)<0.17){ph=2;const f=tt/0.17;yb=TOP-(TOP-BOT)*f*f;}
+      else if((tt-=0.17)<1.1){ph=3;yb=BOT;}
+      else {tt-=1.1;ph=4;const f=clamp(tt/1.8,0,1);yb=BOT+(TOP-BOT)*(f*f*(3-2*f));}
+      if(ph!==this.ph){ if(ph===1) sfx.hiss(nearV(cx,cz,45)); else if(ph===2) sfx.pressSlam(nearV(cx,cz,60)); else if(ph===4) sfx.hydraulic(nearV(cx,cz,40)); }
+      this.prevYb=this.yb; this.yb=yb; this.ph=ph; this.vy=(yb-this.prevYb)/dt;
+      const cy=yb+TH/2; rb.setNextKinematicTranslation({x:cx,y:cy,z:cz}); grp.position.set(cx,cy,cz);
+      const hgt=HT-cy-TH/2; for(const r of rods){ r.scale.y=Math.max(0.01,hgt); r.position.y=TH/2+hgt/2; }
+      lamp.material.emissiveIntensity = ph===1 ? (Math.sin(t*22)>0?4:0.2) : 0.2;
+    },
+    hit(pt,r){
+      if(this.vy>-3) return null;
+      if(Math.abs(pt.x-cx)>S/2+0.05||Math.abs(pt.z-cz)>S/2+0.05) return null;
+      if(pt.y+r>this.yb && pt.y-r<this.prevYb+TH) return out.set(0,this.vy,0);
+      return null;
+    }};
+  hazards.push(p); presses.push(p); updaters.push((dt,t)=>p.update(dt,t));
+}
+makePress(22,14,0); makePress(28,14,3.6);
+label('⚠ ПРЕССЫ',25,9.6,14,1,'#ff6b5a');
+
+/* --- Конвейер + шредер --- */
+function makeConveyor(o){
+  const len=o.zA-o.zB, cz=(o.zA+o.zB)/2;
+  sBox(o.x,o.h/2,cz,o.w,o.h,len,M.steel,{tile:3,fr:1});
+  const rx=Math.round(o.w/1.2), ry=len/1.2;
+  for(const t of [S_belt.map,S_belt.normal,S_belt.orm]) t.repeat.set(rx,ry);
+  const belt=new THREE.Mesh(new THREE.PlaneGeometry(o.w-0.3,len),pbr(S_belt));
+  belt.rotation.x=-Math.PI/2; belt.position.set(o.x,o.h+0.006,cz); belt.receiveShadow=true; scene.add(belt);
+  for(const s of [-1,1]){ sBox(o.x+s*(o.w/2-0.1),o.h+0.5,cz,0.2,1.0,len,M.metal,{tile:2}); }
+  // ролики под лентой
+  for(let z=o.zB+1;z<o.zA;z+=2){ for(const s of [-1,1]){ const rl=new THREE.Mesh(new THREE.CylinderGeometry(0.1,0.1,0.14,10),M.steel); rl.rotation.z=Math.PI/2; rl.position.set(o.x+s*(o.w/2+0.06),o.h-0.2,z); scene.add(rl); } }
+  const c={x:o.x,w:o.w,zA:o.zA,zB:o.zB,h:o.h,vz:-o.speed,
+    inBelt(p,yTol=0.9){ return Math.abs(p.x-o.x)<o.w/2-0.15&&p.z<o.zA&&p.z>o.zB&&p.y>o.h-0.2&&p.y<o.h+yTol; }};
+  conveyors.push(c);
+  updaters.push((dt)=>{ for(const t of [S_belt.map,S_belt.normal,S_belt.orm]) t.offset.y-=o.speed*dt/1.2; });
+  return c;
+}
+
+/* --- Шредер (валки с зубьями или дисковые) --- */
+function makeRoller(cx,cy,cz,len,kind,sgn,speed,xoff){
+  const g=new THREE.Group(); g.position.set(cx,cy,cz); scene.add(g);
+  const disc=kind==='discs';
+  const coreR=disc?0.22:0.37;
+  const core=new THREE.Mesh(cylGeo(coreR,coreR,len,24,0.6),M.steel); core.rotation.z=Math.PI/2; core.castShadow=true; g.add(core);
+  const m4=new THREE.Matrix4(), qq=new THREE.Quaternion(), pp=new THREE.Vector3(), ss=new THREE.Vector3(1,1,1);
+  if(!disc){
+    const n=Math.floor(len/0.4), rows=8, inst=new THREE.InstancedMesh(boxGeo(0.34,0.2,0.2,0.5),M.hammer,n*rows); inst.castShadow=true;
+    let k=0; for(let i=0;i<n;i++) for(let j=0;j<rows;j++){ const a=(j+(i%2)*0.5)*(Math.PI*2/rows); pp.set(-len/2+0.25+i*0.4,Math.cos(a)*(coreR+0.05),Math.sin(a)*(coreR+0.05)); qq.setFromAxisAngle(X_AXIS,a); m4.compose(pp,qq,ss); inst.setMatrixAt(k++,m4); }
+    g.add(inst);
+  } else {
+    const n=Math.floor((len-0.3)/0.5), tn=14;
+    const dg=new THREE.CylinderGeometry(0.6,0.6,0.09,40); dg.rotateZ(Math.PI/2);
+    const dInst=new THREE.InstancedMesh(dg,M.hammer,n); const tInst=new THREE.InstancedMesh(boxGeo(0.09,0.2,0.16,0.4),M.rust,n*tn); dInst.castShadow=tInst.castShadow=true;
+    let k=0; for(let i=0;i<n;i++){ const x=-len/2+0.3+i*0.5+xoff; pp.set(x,0,0); qq.identity(); m4.compose(pp,qq,ss); dInst.setMatrixAt(i,m4);
+      for(let j=0;j<tn;j++){ const a=j*Math.PI*2/tn; pp.set(x,Math.cos(a)*0.64,Math.sin(a)*0.64); qq.setFromAxisAngle(X_AXIS,a); m4.compose(pp,qq,ss); tInst.setMatrixAt(k++,m4); } }
+    g.add(dInst); g.add(tInst);
+  }
+  const rb=world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(cx,cy,cz));
+  const cq=new THREE.Quaternion().setFromAxisAngle(Z_AXIS,Math.PI/2);
+  world.createCollider(RAPIER.ColliderDesc.cylinder(len/2,disc?0.6:0.5).setRotation({x:cq.x,y:cq.y,z:cq.z,w:cq.w}).setFriction(1.2),rb);
+  let ang=0; const q=new THREE.Quaternion();
+  return {update(dt){ ang+=sgn*speed*dt; q.setFromAxisAngle(X_AXIS,ang); g.quaternion.copy(q); rb.setNextKinematicRotation({x:q.x,y:q.y,z:q.z,w:q.w}); }};
+}
+function makeShredder(o){
+  const {cx,cz,w,d,h}=o, th=0.5, disc=o.kind==='discs';
+  for(const s of [-1,1]) sBox(cx+s*(w/2+th/2),h/2,cz,th,h,d+(o.open&&(o.open.pz||o.open.nz)?0:2*th),M.wall,{tile:2});
+  if(!(o.open&&o.open.pz)) sBox(cx,h/2,cz+d/2+th/2,w+2*th,h,th,M.wall,{tile:2});
+  if(!(o.open&&o.open.nz)) sBox(cx,h/2,cz-d/2-th/2,w+2*th,h,th,M.wall,{tile:2});
+  for(const s of [-1,1]) sBox(cx+s*(w/2+th/2),h+0.015,cz,th+0.02,0.03,d,M.hazard,{col:false,tile:1});
+  sBox(cx,0.02,cz,w,0.03,d,M.dark,{col:false,tile:2});
+  const spacing=disc?1.15:0.95, outer=disc?0.7:0.52, cy=h+0.04-outer, sp=disc?3.8:3.0;
+  const r1=makeRoller(cx,cy,cz-spacing/2,w,o.kind,+1,sp,0), r2=makeRoller(cx,cy,cz+spacing/2,w,o.kind,-1,sp,0.25);
+  updaters.push((dt)=>{ r1.update(dt); r2.update(dt); });
+  /* Точный хитбокс: опасен только реальный объём валков (цилиндры с зубьями) и яма под ними.
+     Стенки, края платформ, конвейер и пространство над валками опасными НЕ считаются. */
+  const rz=[cz-spacing/2,cz+spacing/2], Rhit=outer-0.04;
+  const s={cx,cz,w,d,h,disc,cy,rz,Rhit,
+    hit(p,r,extra=0,inset=0.05){
+      if(Math.abs(p.x-cx)>w/2-inset) return false;
+      const R=Rhit+r+extra;
+      for(let i=0;i<2;i++){ const dy=p.y-cy, dz=p.z-rz[i]; if(dy*dy+dz*dz<R*R) return true; }
+      if(p.y<cy&&p.y>-0.5&&Math.abs(p.z-cz)<d/2-0.05) return true;
+      return false;
+    }};
+  shredders.push(s); return s;
+}
+{
+  ramp({x:-30,z:-9.5,w:3.6,len:4.5,h:1.2,dir:'-z'});
+  makeConveyor({x:-30,zA:-14,zB:-38.4,w:3.6,h:1.2,speed:2.2});
+  makeShredder({cx:-30,cz:-40,w:4,d:3.2,h:1.2,kind:'teeth',open:{pz:true}});
+  label('⚠ КОНВЕЙЕР → ШРЕДЕР',-30,4.2,-12,1,'#ff6b5a');
+
+  ramp({x:12,z:-18,w:4,len:5,h:1.2,dir:'-z'});
+  sBox(12,0.6,-27.5,4,1.2,9,M.conc2,{tile:2});
+  sBox(12,0.6,-39.7,4,1.2,8.6,M.conc2,{tile:2});
+  ramp({x:12,z:-49,w:4,len:5,h:1.2,dir:'+z'});
+  makeShredder({cx:12,cz:-33.7,w:4,d:3.4,h:1.2,kind:'discs',open:{pz:true,nz:true}});
+  for(const s of [-1,1]){ sBox(12+s*2.1,2.4,-27.5,0.12,2.4,9,M.metal,{tile:2}); sBox(12+s*2.1,2.4,-39.7,0.12,2.4,8.6,M.metal,{tile:2}); }
+  label('⚠ ДИСКОВЫЙ ШРЕДЕР — перепрыгни!',12,5.4,-31,1,'#ff6b5a');
+}
+
+/* --- Поршни-толкатели --- */
+function makePiston(wallX,dir,z,phase){
+  const hx=0.35,hy=1.25,hz=1.4,EXT=4.6,T=4.0,y=hy+0.05;
+  const grp=new THREE.Group(); scene.add(grp);
+  const head=new THREE.Mesh(new RoundedBoxGeometry(hx*2,hy*2,hz*2,3,0.07),M.hammer); head.castShadow=true; grp.add(head);
+  const face=new THREE.Mesh(boxGeo(0.06,hy*2-0.25,hz*2-0.25,1.2),M.hazard); face.position.x=dir*hx; grp.add(face);
+  const rod=new THREE.Mesh(boxGeo(1,0.34,0.34,1),M.metal); rod.position.y=y; rod.castShadow=true; scene.add(rod);
+  const lamp=new THREE.Mesh(new THREE.SphereGeometry(0.16,14,10),M.red.clone()); lamp.position.set(wallX-dir*0.45,3.4,z); scene.add(lamp);
+  const rb=world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(wallX+dir*hx,y,z));
+  world.createCollider(RAPIER.ColliderDesc.cuboid(hx,hy,hz).setFriction(0.8),rb);
+  let hxPos=wallX+dir*hx;
+  const out=new THREE.Vector3();
+  const h={kind:'piston',cd:0,px:wallX,pz:z,w:0,vx:0,
+    update(dt,t){
+      const tt=(((t+phase)%T)+T)%T; let f=0;
+      if(tt<2.2) f=0; else if(tt<2.5) f=smooth(0,1,(tt-2.2)/0.3); else if(tt<3.4) f=1; else f=1-smooth(0,1,(tt-3.4)/0.6);
+      if(tt>1.5&&tt<2.2) lamp.material.emissiveIntensity=Math.sin(t*26)>0?4:0.2; else lamp.material.emissiveIntensity=0.2;
+      if(this._f<0.5&&f>=0.5&&this._f!==undefined) sfx.pistonHit(nearV(wallX,z,40));
+      this._f=f;
+      const prev=hxPos; hxPos=wallX+dir*(hx+EXT*f); this.vx=(hxPos-prev)/dt; this.w=this.vx/3;
+      rb.setNextKinematicTranslation({x:hxPos,y,z}); grp.position.set(hxPos,y,z);
+      const len=Math.max(0.02,EXT*f+0.02); rod.scale.x=len; rod.position.set(wallX+dir*len/2,y,z);
+    },
+    hit(p,r){
+      if(Math.abs(this.vx)<3) return null;
+      if(Math.abs(p.x-hxPos)<hx+r&&Math.abs(p.y-y)<hy+r&&Math.abs(p.z-z)<hz+r) return out.set(this.vx,0,0);
+      return null;
+    }};
+  hazards.push(h); updaters.push((dt,t)=>h.update(dt,t));
+}
+{
+  const zA=-50, zB=-72, cz=(zA+zB)/2, len=zA-zB;
+  sBox(25.5,2.2,cz,1,4.4,len,M.wall,{tile:3}); sBox(34.5,2.2,cz,1,4.4,len,M.wall,{tile:3});
+  sBox(30,0.012,zA+1,8,0.02,1.5,M.hazard,{col:false,tile:2});
+  for(const z of [-55,-60,-65,-70]) makePiston(26,+1,z,z*0.37);
+  for(const z of [-57.5,-62.5,-67.5]) makePiston(34,-1,z,z*0.37+2);
+  label('⚠ ПОРШНИ-ТОЛКАТЕЛИ',30,5.6,-50,1,'#ff6b5a');
+}
+
+/* --- Шипы --- */
+function makeSpikes(x,z,w,d){
+  const nx=Math.floor(w/0.5), nz=Math.floor(d/0.5);
+  sBox(x,0.04,z,w,0.08,d,M.dark,{col:false,tile:2});
+  const inst=new THREE.InstancedMesh(new THREE.ConeGeometry(0.11,0.6,10),M.hammer,nx*nz); inst.castShadow=true;
+  const m4=new THREE.Matrix4(), pp=new THREE.Vector3(), qq=new THREE.Quaternion(), ss=new THREE.Vector3(1,1,1); let k=0;
+  for(let i=0;i<nx;i++) for(let j=0;j<nz;j++){ pp.set(x-w/2+0.25+i*0.5+rnd(-0.05,0.05),0.38,z-d/2+0.25+j*0.5+rnd(-0.05,0.05)); ss.set(1,rnd(0.8,1.2),1); m4.compose(pp,qq,ss); inst.setMatrixAt(k++,m4); }
+  scene.add(inst);
+  const out=new THREE.Vector3();
+  hazards.push({kind:'spikes',cd:0,hit(p,r){ if(p.y-r>0.5||Math.abs(p.x-x)>w/2||Math.abs(p.z-z)>d/2) return null; return out.set(0,6,0); }});
+  spikeZones.push({x,z,w,d});
+  label('⚠ ШИПЫ',x,2.6,z,0.9,'#ff6b5a');
+}
+makeSpikes(56,10,8,8);
+
+/* --- Шар-«бабка» на кране + кирпичная стена --- */
+{
+  const cx=-52, cz=40;
+  for(const s of [-1,1]){ sBox(cx+s*3.3,7.2,cz,0.6,14.4,0.6,M.steel,{tile:1.5}); sBox(cx+s*3.3,0.4,cz+s*0.0,1.6,0.8,1.6,M.conc2,{tile:2}); }
+  sBox(cx,14.35,cz,7.2,0.6,0.8,M.metal,{tile:2});
+  for(const s of [-1,1]) for(const z of [-1,1]) sBox(cx+s*3.3,7,cz+z*0.9,0.18,13,0.18,M.rust,{tile:1,col:false,rot:new THREE.Quaternion().setFromAxisAngle(X_AXIS,z*0.07)});
+  makePendulum({x:cx,y:14,z:cz,axis:'x',L:12.6,ball:true,R:1.2,amp:0.85,omega:1.15,phase:0});
+  label('⚠ ШАР-БАБКА',cx,17,cz,1.1,'#ff6b5a');
+  const bz=cz+6.4;
+  for(let r=0;r<9;r++) for(let c=0;c<10;c++) dynBox(cx-4.1+c*0.82+(r%2)*0.4,0.2+r*0.41,bz,0.8,0.4,0.4,M.brick,160);
+}
+
+/* --- Контейнерный двор --- */
+{
+  const z0=[-17.6,-20,-22.4];
+  z0.forEach((z,i)=>{ sBox(-53,1.3,z,6,2.6,2.4,CONT[i%4],{tile:3}); sBox(-53,3.9,z,6,2.6,2.4,CONT[(i+1)%4],{tile:3}); });
+  ramp({x:-70,z:-20,w:2.4,len:14,h:5.2,dir:'+x'});
+  sBox(-53,5.7,-17.0,6,1.0,0.12,M.metal,{tile:2}); sBox(-53,5.7,-23.0,6,1.0,0.12,M.metal,{tile:2});
+  sBox(-40,1.3,-6,6,2.6,2.4,CONT[0],{tile:3,rot:new THREE.Quaternion().setFromAxisAngle(Y_AXIS,0.45)});
+  sBox(-44,1.3,6,6,2.6,2.4,CONT[2],{tile:3,rot:new THREE.Quaternion().setFromAxisAngle(Y_AXIS,-0.3)});
+  sBox(-47,1.3,12,6,2.6,2.4,CONT[3],{tile:3});
+  sBox(-47,3.9,12,6,2.6,2.4,CONT[1],{tile:3,rot:new THREE.Quaternion().setFromAxisAngle(Y_AXIS,0.2)});
+  label('КОНТЕЙНЕРНЫЙ ДВОР → 5.2 м',-62,3.2,-14,0.9,'#8be9ff');
+}
+
+/* --- Прыжок с 8 м в картонные коробки --- */
+{
+  const z=-52;
+  ramp({x:-70,z,w:5,len:16,h:8,dir:'+x'});
+  sBox(-50,4,z,8,8,5,M.conc2,{tile:3});
+  sBox(-46.1,8.5,z,0.2,1,5,M.hazard,{tile:1.2,col:false});
+  for(let l=0;l<3;l++) for(let i=0;i<4;i++) for(let j=0;j<5;j++) dynBox(-43.4+i*0.95,0.45+l*0.92,z+(j-2)*0.95,0.9,0.9,0.9,M.card,18);
+  label('8 м → В КОРОБКИ',-52,10.6,z-3,1,'#ffb44d');
+}
+
+/* --- Ступенчатая пирамида --- */
+{
+  for(let i=0;i<6;i++){ const s=16-2.4*i; sBox(0,(i+.5)*0.8,-58,s,0.8,s*0.82,M.conc2,{tile:2}); }
+  const fl=new THREE.Mesh(cylGeo(0.04,0.045,2.2,10,0.6),M.steel); fl.position.set(0,4.8+1.1,-58); fl.castShadow=true; scene.add(fl);
+  const cl=new THREE.Mesh(boxGeo(0.9,0.55,0.03,0.6),M.red); cl.position.set(0.45,4.8+1.9,-58); scene.add(cl);
+  label('ПИРАМИДА 4.8 м — кувыркайся!',0,9.6,-64,0.9,'#8be9ff');
+}
+
+/* --- Кегельбан, бочки, домино, шары --- */
+{
+  const z0=60;
+  for(const [x,y,z] of [[-14,0.5,z0],[-13,0.5,z0],[-12,0.5,z0],[-13.5,1.5,z0],[-12.5,1.5,z0],[-13,2.5,z0]]) dynCyl(x,y,z,0.38,1.0,M.barrel,90);
+  for(let i=0;i<5;i++) dynCyl(-18+i*0.8,0.5,z0+4,0.38,1.0,M.barrel,90);
+  for(let i=0;i<16;i++) dynBox(-8+i*0.6,0.7,z0+3,0.16,1.4,0.8,[M.domFace,M.domFace,M.domEdge,M.domEdge,M.domEdge,M.domEdge],200);
+  dynBall(-9,0.5,z0+3,0.5,M.bowl,300,0.2,true);
+  for(let r=0;r<4;r++) for(let c=0;c<=r;c++) dynPin(8+r*0.55,0.4,z0+(c-r/2)*0.5);
+  dynBall(3,0.4,z0,0.4,M.bowl,420,0.15,true);
+  dynBall(14,0.9,z0-3,0.9,M.ball,6,0.7); dynBall(16.5,0.9,z0+2,0.9,M.ball2,6,0.7); dynBall(19,0.9,z0-1,0.9,M.ball,6,0.7);
+  label('КЕГЕЛЬБАН · ДОМИНО · БОЧКИ',0,4.4,z0-6,1,'#8be9ff');
+}
+
+/* --- Деревья, фонари, барьеры --- */
+function tree(x,z,s){
+  const tr=new THREE.Mesh(cylGeo(0.16*s,0.25*s,3*s,12,0.5),M.bark); tr.position.set(x,1.5*s,z); tr.castShadow=true; tr.receiveShadow=true; scene.add(tr);
+  const fl=new THREE.Mesh(cylGeo(0.25*s,0.42*s,0.45*s,12,0.5),M.bark); fl.position.set(x,0.22*s,z); fl.castShadow=true; scene.add(fl);
+  for(let i=0;i<4;i++){
+    const r=(2.1-i*0.42)*s, hh=2.3*s, g=new THREE.ConeGeometry(r,hh,16,1); scaleUV(g,Math.max(2,Math.round(Math.PI*2*r/0.7)),hh/0.7);
+    const c=new THREE.Mesh(g,i%2?M.leaf2:M.leaf); c.position.set(x,(2.9+i*1.0)*s,z); c.rotation.y=i*0.8; c.castShadow=true; c.receiveShadow=true; scene.add(c);
+  }
+  world.createCollider(RAPIER.ColliderDesc.cylinder(1.5*s,0.26*s).setTranslation(x,1.5*s,z));
+}
+{
+  let placed=0, tries=0;
+  while(placed<26&&tries<400){ tries++;
+    const x=58+srnd()*14, z=-28+srnd()*56*(srnd()<0.2?1:0.8)-0;
+    if(Math.abs(x-56)<8&&Math.abs(z-10)<8) continue; if(Math.abs(x-46)<5&&Math.abs(z-12)<5) continue;
+    if(z>32) continue; tree(x,z,0.8+srnd()*0.7); placed++; }
+  for(const [x,z] of [[-66,-6],[-66,2],[-66,10],[-66,18],[-62,60],[-50,66],[40,66],[60,60],[66,66],[-66,50],[-66,-34]]) tree(x,z,0.9+srnd()*0.6);
+}
+function lampPost(x,z){
+  const base=new THREE.Mesh(cylGeo(0.18,0.2,0.3,12,0.5),M.steel); base.position.set(x,0.15,z); base.castShadow=true; scene.add(base);
+  const p=new THREE.Mesh(cylGeo(0.07,0.11,6,14,0.5),M.steel); p.position.set(x,3,z); p.castShadow=true; scene.add(p);
+  const a=new THREE.Mesh(boxGeo(0.95,0.08,0.08,0.6),M.steel); a.position.set(x+0.42,6,z); scene.add(a);
+  const hs=new THREE.Mesh(new RoundedBoxGeometry(0.62,0.14,0.32,2,0.04),M.steel); hs.position.set(x+0.8,6.02,z); hs.castShadow=true; scene.add(hs);
+  const hd=new THREE.Mesh(boxGeo(0.5,0.04,0.26,0.4),M.lampHead); hd.position.set(x+0.8,5.94,z); scene.add(hd);
+  world.createCollider(RAPIER.ColliderDesc.cylinder(3,0.1).setTranslation(x,3,z));
+}
+for(const [x,z] of [[-7,-12],[7,-12],[-12,16],[12,22],[-14,44],[14,52],[-18,-34],[-40,20],[24,-44],[20,64],[-26,64],[62,-8],[-62,-34]]) lampPost(x,z);
+for(const [x,z,r] of [[-6.5,8,0.2],[-3.5,8.4,0.1],[3.5,8.4,-0.1],[6.5,8,-0.2],[-8,-20,1.57],[16,-20,1.57],[-14,-10,0.8]]) sBox(x,0.45,z,2.4,0.9,0.6,M.conc2,{tile:1.5,rot:new THREE.Quaternion().setFromAxisAngle(Y_AXIS,r)});
+/* ================= AUDIO (синтез) ================= */
+let AC=null, master=null, lpMaster=null, reverbIn=null, noiseBuf=null, tinnGain=null, grindGain=null, humGain=null, windGain=null, windF=null, breathGain=null, whooshGain=null, whooshF=null, elevGain=null, elevOsc=null, shredGain=null;
+let ringT=0;
+function makeIR(sec,decay){
+  const len=(AC.sampleRate*sec)|0, b=AC.createBuffer(2,len,AC.sampleRate);
+  for(let c=0;c<2;c++){ const d=b.getChannelData(c); for(let i=0;i<len;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/len,decay); }
+  return b;
+}
+function loopNoise(filterType,freq,q,gainNode){
+  const ns=AC.createBufferSource(); ns.buffer=noiseBuf; ns.loop=true; ns.playbackRate.value=rnd(0.9,1.1);
+  const f=AC.createBiquadFilter(); f.type=filterType; f.frequency.value=freq; f.Q.value=q;
+  ns.connect(f); f.connect(gainNode); ns.start(AC.currentTime,Math.random()); return f;
+}
+function initAudio(){
+  if(AC) return;
+  try{ AC=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return; }
+  master=AC.createGain(); master.gain.value=0.85;
+  lpMaster=AC.createBiquadFilter(); lpMaster.type='lowpass'; lpMaster.frequency.value=22000; lpMaster.Q.value=0.5;
+  const comp=AC.createDynamicsCompressor(); comp.threshold.value=-16; comp.ratio.value=5; comp.attack.value=0.003; comp.release.value=0.22;
+  master.connect(lpMaster); lpMaster.connect(comp); comp.connect(AC.destination);
+  const conv=AC.createConvolver(); conv.buffer=makeIR(1.8,2.6);
+  reverbIn=AC.createGain(); const rw=AC.createGain(); rw.gain.value=0.24; reverbIn.connect(conv); conv.connect(rw); rw.connect(master);
+  const len=AC.sampleRate*3; noiseBuf=AC.createBuffer(1,len,AC.sampleRate); const d=noiseBuf.getChannelData(0); for(let i=0;i<len;i++) d[i]=Math.random()*2-1;
+  // писк в ушах (громкость задаётся каждый кадр от сотрясения)
+  tinnGain=AC.createGain(); tinnGain.gain.value=0; tinnGain.connect(master);
+  for(const f of [4150,6230]){ const o=AC.createOscillator(); o.frequency.value=f; o.connect(tinnGain); o.start(); }
+  grindGain=AC.createGain(); grindGain.gain.value=0; grindGain.connect(master); loopNoise('bandpass',650,0.9,grindGain);
+  humGain=AC.createGain(); humGain.gain.value=0; humGain.connect(master);
+  { const h=AC.createOscillator(); h.type='sawtooth'; h.frequency.value=46; const lp=AC.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=150; h.connect(lp); lp.connect(humGain); h.start(); }
+  windGain=AC.createGain(); windGain.gain.value=0; windGain.connect(master); windF=loopNoise('bandpass',400,0.5,windGain);
+  breathGain=AC.createGain(); breathGain.gain.value=0; breathGain.connect(master); loopNoise('bandpass',1300,1.2,breathGain);
+  whooshGain=AC.createGain(); whooshGain.gain.value=0; whooshGain.connect(master); whooshF=loopNoise('bandpass',500,0.8,whooshGain);
+  elevGain=AC.createGain(); elevGain.gain.value=0; elevGain.connect(master);
+  { elevOsc=AC.createOscillator(); elevOsc.type='triangle'; elevOsc.frequency.value=60; const lp=AC.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=220; elevOsc.connect(lp); lp.connect(elevGain); elevOsc.start(); }
+  shredGain=AC.createGain(); shredGain.gain.value=0; shredGain.connect(master);
+  { const bp=AC.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=320; bp.Q.value=1.1; const am=AC.createGain(); am.gain.value=0.55; bp.connect(am); am.connect(shredGain);
+    for(const f of [58,61.5,87]){ const o=AC.createOscillator(); o.type='sawtooth'; o.frequency.value=f; o.connect(bp); o.start(); }
+    const lfo=AC.createOscillator(); lfo.frequency.value=17; const lg=AC.createGain(); lg.gain.value=0.45; lfo.connect(lg); lg.connect(am.gain); lfo.start(); }
+}
+function resetAudioFx(){
+  ringT=0; if(!AC) return; const t=AC.currentTime;
+  tinnGain.gain.cancelScheduledValues(t); tinnGain.gain.setValueAtTime(0,t);
+  lpMaster.frequency.cancelScheduledValues(t); lpMaster.frequency.setValueAtTime(22000,t);
+}
+function toOut(node,send){
+  node.connect(master);
+  if(send>0&&reverbIn){ const s=AC.createGain(); s.gain.value=send; node.connect(s); s.connect(reverbIn); }
+}
+function noiseBurst(dur,freq,q,vol,type='bandpass',delay=0,send=0.12,att=0.002){
+  if(!AC||vol<=0.0005) return; const t=AC.currentTime+delay; const s=AC.createBufferSource(); s.buffer=noiseBuf;
+  const f=AC.createBiquadFilter(); f.type=type; f.frequency.value=freq; f.Q.value=q; const g=AC.createGain();
+  g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(vol,t+att); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  s.connect(f); f.connect(g); toOut(g,send); s.start(t,Math.random()*2); s.stop(t+dur+0.05);
+}
+function tone(f0,f1,dur,vol,type='sine',delay=0,send=0.12){
+  if(!AC||vol<=0.0005) return; const t=AC.currentTime+delay; const o=AC.createOscillator(); o.type=type; o.frequency.setValueAtTime(f0,t); o.frequency.exponentialRampToValueAtTime(f1,t+dur);
+  const g=AC.createGain(); g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(vol,t+0.004); g.gain.exponentialRampToValueAtTime(0.0001,t+dur); o.connect(g); toOut(g,send); o.start(t); o.stop(t+dur+0.05);
+}
+function voice(f0,f1,dur,vol,fa=700,fb=1100,delay=0,vib=0){
+  if(!AC||vol<=0.0005) return; const t=AC.currentTime+delay;
+  const o=AC.createOscillator(); o.type='sawtooth'; o.frequency.setValueAtTime(f0,t); o.frequency.exponentialRampToValueAtTime(f1,t+dur);
+  const g=AC.createGain(); g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(vol,t+Math.min(0.06,dur*0.3)); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  const b1=AC.createBiquadFilter(); b1.type='bandpass'; b1.frequency.value=fa; b1.Q.value=4;
+  const b2=AC.createBiquadFilter(); b2.type='bandpass'; b2.frequency.value=fb; b2.Q.value=5; const g2=AC.createGain(); g2.gain.value=0.6;
+  o.connect(b1); b1.connect(g); o.connect(b2); b2.connect(g2); g2.connect(g); toOut(g,0.18);
+  if(vib){ const l=AC.createOscillator(); l.frequency.value=6.5; const lg=AC.createGain(); lg.gain.value=vib; l.connect(lg); lg.connect(o.frequency); l.start(t); l.stop(t+dur+0.05); }
+  o.start(t); o.stop(t+dur+0.05);
+  noiseBurst(dur*0.8,fa*1.3,1.2,vol*0.35,'bandpass',delay,0.1,Math.min(0.05,dur*0.3));
+}
+function nearV(x,z,range=40){ const p=playerPos(); const d=Math.hypot(p.x-x,p.z-z); return Math.pow(clamp(1-d/range,0,1),1.5); }
+const sfx={
+  step(spd,surf){ const k=clamp(0.5+spd/9,0.5,1.2), j=rnd(0.85,1.2);
+    if(surf==='metal'){ noiseBurst(0.05,3200*j,1.5,0.09*k,'bandpass',0,0.2); tone(430*j,300*j,0.12,0.045*k,'triangle',0,0.3); tone(95,55,0.07,0.12*k); }
+    else { noiseBurst(0.045,1700*j,1.0,0.08*k,'bandpass',0,0.08); noiseBurst(0.08,380*j,0.7,0.14*k,'lowpass',0,0.05); tone(120*j,60,0.07,0.13*k,'sine',0,0.02); } },
+  scuff(v){ noiseBurst(0.2,2200,0.6,0.1*clamp(v/8,0.3,1),'bandpass'); },
+  jump(){ voice(160,250,0.16,0.12,650,1100); noiseBurst(0.07,1600,1,0.05); },
+  thud(v){ const k=clamp(v/14,0.12,1); noiseBurst(0.22,220,0.7,0.55*k,'lowpass',0,0.2); tone(95,32,0.3,0.85*k,'sine',0,0.15); noiseBurst(0.06,1200,1,0.2*k,'bandpass'); if(k>0.5) tone(55,28,0.5,0.5*k); },
+  slap(s){ const k=clamp(s/6,0.2,1); noiseBurst(0.07,900,0.8,0.22*k,'lowpass'); tone(140,70,0.08,0.22*k); },
+  crack(){ noiseBurst(0.03,3300,1.5,0.9); noiseBurst(0.05,1800,2,0.7,'bandpass',0.05); tone(150,50,0.12,0.5); noiseBurst(0.02,4400,2,0.55,'bandpass',0.12); noiseBurst(0.2,700,1.5,0.25,'bandpass',0.08); },
+  squelch(){ noiseBurst(0.14,800,2.5,0.2,'bandpass'); noiseBurst(0.1,500,3,0.15,'bandpass',0.09); },
+  slam(){ noiseBurst(0.6,120,0.6,1,'lowpass',0,0.3); tone(70,22,0.7,1,'sine',0,0.2); noiseBurst(0.25,2500,1,0.5); },
+  pressSlam(v){ if(v<=0.01) return; noiseBurst(0.7,110,0.6,1.0*v,'lowpass',0,0.3); tone(62,20,0.8,0.95*v,'sine',0,0.2); noiseBurst(0.3,2200,1,0.45*v); this.clang(v*14); },
+  hiss(v){ if(v<=0.01) return; noiseBurst(0.9,6500,0.6,0.28*v,'highpass',0,0.2,0.25); },
+  hydraulic(v){ if(v<=0.01) return; tone(80,140,1.6,0.12*v,'sawtooth',0,0.1); noiseBurst(1.7,900,1.2,0.07*v,'bandpass',0,0.1,0.4); },
+  pistonHit(v){ if(v<=0.01) return; noiseBurst(0.12,1800,1,0.35*v,'bandpass'); tone(110,45,0.25,0.55*v); this.clang(v*8); },
+  clang(v){ const k=clamp(v/14,0.15,1), j=rnd(0.9,1.1);
+    for(const [f,vv,d] of [[310,0.22,0.5],[523,0.16,0.4],[842,0.12,0.3],[1330,0.08,0.2]]) tone(f*j,f*j*0.985,d,vv*k,'sine',0,0.35);
+    noiseBurst(0.06,3800,1.2,0.45*k); },
+  stab(){ noiseBurst(0.05,3500,1.5,0.4); tone(300,120,0.1,0.3,'triangle'); this.squelch(); },
+  grunt(v){ const vol=clamp(v/14,0.15,0.5); voice(rnd(120,170),70,0.38,vol*0.75,650,1050); },
+  groan(){ voice(120,80,0.7,0.2,500,900,0,10); },
+  scream(){ voice(560,420,1.25,0.26,900,1900,0,22); voice(850,600,1.1,0.12,1400,2600,0.02,28); },
+  death(){ tone(130,28,1.8,0.55,'sine',0,0.4); noiseBurst(1.2,200,0.8,0.3,'lowpass',0,0.4); voice(110,60,0.9,0.18,450,800,0.05,6); },
+  beat(){ tone(62,38,0.13,0.6); tone(55,34,0.15,0.42,'sine',0.17); },
+  boing(){ tone(170,560,0.28,0.22,'triangle',0,0.25); tone(240,820,0.22,0.12,'sine',0.03,0.2); tone(380,200,0.3,0.08,'triangle',0.15); noiseBurst(0.05,1500,1,0.1); },
+  bandage(){ noiseBurst(0.38,4800,0.7,0.2,'highpass',0,0.05,0.04); noiseBurst(0.18,2200,1,0.12,'bandpass',0.35); },
+  pill(){ for(let i=0;i<4;i++){ tone(rnd(2200,3200),rnd(1600,2000),0.035,0.09,'square',i*0.045,0.1); } tone(180,90,0.12,0.15,'sine',0.25); },
+  splint(){ noiseBurst(0.04,2500,1.5,0.4); tone(330,200,0.08,0.2,'triangle'); noiseBurst(0.25,3500,0.8,0.1,'highpass',0.1); },
+  heal(){ [523,659,784,1047].forEach((f,i)=>tone(f,f*1.002,0.7,0.14,'triangle',i*0.11,0.4)); },
+  blip(){ tone(900,1100,0.08,0.1,'square'); }
+};
+
+/* ================= ВВОД ================= */
+let started=false, locked=false, dragging=false, timeScale=1;
+let camYaw=Math.PI, camPitch=0.32, camDist=4.8;
+const keys={}, pressed={};
+addEventListener('keydown',e=>{
+  if(['Tab','Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
+  if(e.repeat) return; keys[e.code]=true; pressed[e.code]=true;
+});
+addEventListener('keyup',e=>{ keys[e.code]=false; });
+addEventListener('blur',()=>{ for(const k in keys) keys[k]=false; });
+document.addEventListener('pointerlockchange',()=>{ locked=document.pointerLockElement===renderer.domElement; });
+renderer.domElement.addEventListener('mousedown',()=>{ if(!started) return; if(!locked){ try{ renderer.domElement.requestPointerLock(); }catch(_){} } dragging=true; });
+addEventListener('mouseup',()=>{ dragging=false; });
+addEventListener('mousemove',e=>{ if(!started) return; if(locked||dragging){ camYaw-=e.movementX*0.0024; camPitch=clamp(camPitch+e.movementY*0.0024,-0.4,1.35); } });
+addEventListener('wheel',e=>{ camDist=clamp(camDist+e.deltaY*0.004,2,12); },{passive:true});
+addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
+
+/* ================= ТРАВМЫ ================= */
+const BONES={
+  skull:['Череп','head'], ribs:['Рёбра','torso'], spine:['Позвоночник','torso'], pelvis:['Таз','pelvis'],
+  humerusL:['Левая плечевая кость','uArmL'], radiusL:['Левая лучевая кость','fArmL'], humerusR:['Правая плечевая кость','uArmR'], radiusR:['Правая лучевая кость','fArmR'],
+  femurL:['Левое бедро','thighL'], tibiaL:['Левая большеберцовая кость','shinL'], femurR:['Правое бедро','thighR'], tibiaR:['Правая большеберцовая кость','shinR']
+};
+const STAT=['цела','трещина','перелом','открытый перелом'];
+const ORDER=['pelvis','torso','head','uArmL','fArmL','uArmR','fArmR','thighL','shinL','thighR','shinR'];
+const PART_RU={head:'голова',torso:'торс',pelvis:'таз',uArmL:'левое плечо',fArmL:'левое предплечье',uArmR:'правое плечо',fArmR:'правое предплечье',thighL:'левое бедро',shinL:'левая голень',thighR:'правое бедро',shinR:'правая голень'};
+function boneOf(part){
+  if(part==='head') return 'skull'; if(part==='torso') return 'ribs'; if(part==='pelvis') return 'pelvis';
+  const S=part.slice(-1), k=part.slice(0,-1);
+  return ({uArm:'humerus',fArm:'radius',thigh:'femur',shin:'tibia'})[k]+S;
+}
+const I={};
+function resetInjuries(keepItems){
+  I.bone={}; for(const b in BONES) I.bone[b]=0;
+  I.bruise={}; I.mangled={}; I.splint={}; for(const p of ORDER){ I.bruise[p]=0; }
+  I.wounds=[]; I.internal=0; I.concussion=0; I.blood=5000; I.pain=0; I.painBase=0; I.painSpike=0; I.adren=0; I.pill=0;
+  I.curlT=0; I.consc=100; I.koT=0; I.stamina=100; I.sprintLock=false; I.paralyzed=false; I.healT=0; I.hbT=0;
+  if(!keepItems) I.items={band:3,pill:2,splint:2};
+  panelDirty=true; visDirty=true;
+}
+let panelDirty=true, visDirty=true, trauma=0;
+resetInjuries();
+
+function notify(text,cls=''){
+  const box=$('toasts'); const d=document.createElement('div'); d.className='toast '+cls; d.textContent=text; box.appendChild(d);
+  while(box.children.length>5) box.removeChild(box.firstChild);
+  setTimeout(()=>{ d.style.transition='opacity .5s'; d.style.opacity=0; setTimeout(()=>d.remove(),520); },3600);
+}
+function flash(a){ const f=$('fxFlash'); f.style.transition='none'; f.style.opacity=clamp(a,0,0.8); requestAnimationFrame(()=>{ f.style.transition='opacity .45s'; f.style.opacity=0; }); }
+function addWound(part,rate){
+  let w=I.wounds.find(x=>x.part===part);
+  if(w){ w.rate+=rate; w.bandaged=false; } else I.wounds.push({part,rate,bandaged:false});
+  visDirty=true; panelDirty=true;
+}
+function bleedRate(){ let r=I.internal; for(const w of I.wounds) if(!w.bandaged) r+=w.rate; return r; }
+function legPen(S){
+  let p=0; for(const b of ['femur','tibia']){ const st=I.bone[b+S]; p=Math.max(p,[0,0.12,0.6,0.78][st]*(I.splint[b+S]?0.65:1)); }
+  p=Math.max(p,[0,0.1,0.45,0.72][I.bone.pelvis]*(I.splint.pelvis?0.7:1));
+  p=Math.max(p,clamp((I.bruise['shin'+S]+I.bruise['thigh'+S])*0.14,0,0.22));
+  if(I.mangled['thigh'+S]||I.mangled['shin'+S]) p=Math.max(p,0.85);
+  return p;
+}
+function canStand(){ return !I.paralyzed && !(legPen('L')>=0.55&&legPen('R')>=0.55); }
+function armBroken(S){ return I.bone['humerus'+S]>=2||I.bone['radius'+S]>=2; }
+
+function setBone(name,st){
+  const cur=I.bone[name]; if(st<=cur) return; I.bone[name]=st;
+  const [lab]=BONES[name]; const part=BONES[name][1];
+  if(st>=2){ sfx.crack(); notify(`${lab}: ${STAT[st]}!`,'bad'); } else notify(`${lab}: ${STAT[st]}`,'warn');
+  if(st===3){
+    if(name.startsWith('femur')) addWound(part,42); else if(/^(tibia|humerus|radius)/.test(name)) addWound(part,name.startsWith('tibia')?18:11);
+    else if(name==='ribs'){ I.internal+=6; notify('Пневмоторакс и внутреннее кровотечение','bad'); }
+    else if(name==='pelvis'){ I.internal+=12; notify('Внутреннее кровотечение!','bad'); }
+  }
+  if(name==='spine'&&st>=2){ I.paralyzed=true; notify('Повреждение позвоночника — ноги не слушаются','bad'); }
+  if(name==='skull'&&st>=3) die('Открытая черепно-мозговая травма');
+  /* реакция на перелом: скручивает от боли, поза эмбриона */
+  if(st>=2){ const cd={femur:8,tibia:6,pelvis:8,humerus:5,radius:3.5,ribs:6}[name.replace(/[LR]$/,'')]; if(cd) painCurl(cd+(st===3?2.5:0)); }
+  visDirty=true; panelDirty=true;
+}
+/* Реакция на перелом: персонаж падает и сворачивается в позу эмбриона от боли */
+function painCurl(dur){
+  if(P.dead||P.mode==='crushed'||I.koT>0) return;
+  if(I.pill>0) dur*=0.55;
+  const was=I.curlT>0;
+  if(dur>I.curlT) I.curlT=dur;
+  if(!was){ R.curlSide=Math.random()<0.5?1:-1; R.writhe=0.5; notify('Скрутило от боли…','warn'); if(dur>=6) sfx.scream(); else sfx.groan(); }
+  if(P.mode==='active') startRagdoll(new THREE.Vector3(P.hv.x*0.5,-0.5,P.hv.y*0.5),{grace:0.3,ang:0.3});
+}
+function knockOut(dur,why){
+  if(P.dead) return; I.koT=Math.max(I.koT,dur); I.curlT=0; notify(`Потеря сознания (${why})`,'bad');
+  if(P.mode==='active') startRagdoll(new THREE.Vector3(P.hv.x*0.6,0,P.hv.y*0.6),{grace:0.3});
+}
+function concuss(s){
+  if(s<4) return;
+  I.concussion=clamp(I.concussion+(s-3.5)*7,0,100);
+  ringT=Math.max(ringT,clamp(s/3,1.5,5));
+  if(s>7.5 && Math.random()<smooth(7,11,s)+0.15) knockOut(clamp((s-6.5)*1.3,1.5,26),'удар по голове');
+  if(I.concussion>25) notify('Сотрясение мозга','warn');
+  panelDirty=true;
+}
+function die(why){
+  if(P.dead) return; P.dead=true; I.deathWhy=why; I.koT=0; I.curlT=0; P.deadT=0;
+  notify('Критическая травма: '+why,'bad'); sfx.crack(); sfx.death(); flash(0.7);
+  if(P.mode==='active') startRagdoll(new THREE.Vector3(P.hv.x*0.5,0,P.hv.y*0.5),{grace:0.3});
+}
+function partImpact(part,s0){
+  if(P.dead && P.mode==='crushed') return;
+  const s=s0*rnd(0.92,1.1); if(s<2.5) return;
+  I.bruise[part]=clamp(I.bruise[part]+s/22,0,1);
+  const k=part.replace(/[LR]$/,'');
+  const th={uArm:[6.5,8.8,11.5],fArm:[6,8,10.5],thigh:[8,10.5,14],shin:[6.5,8.5,11.5],pelvis:[7.5,10,13],ribs:[6,8.5,11.5],skull:[9,11.5,14.5]};
+  const grade=(bone,t)=>{
+    let st=s>t[2]?3:s>t[1]?2:s>t[0]?1:0; const cur=I.bone[bone];
+    if(cur>0 && s>t[0]*0.8) st=Math.min(3,Math.max(st,cur+(Math.random()<0.5?1:0)));
+    if(st) setBone(bone,st);
+  };
+  if(k==='head'){ concuss(s); grade('skull',th.skull); if(s>16) die('Тяжёлая черепно-мозговая травма'); }
+  else if(k==='torso'){
+    grade('ribs',th.ribs);
+    if(s>11 && Math.random()<(s-11)/9) setBone('spine',s>16?3:2);
+    if(s>9 && Math.random()<0.25) I.internal+=2;
+    if(s>21) die('Разрыв внутренних органов');
+  } else grade(boneOf(part),th[k]);
+  I.painSpike=Math.min(130,I.painSpike+s*3); I.adren=1; trauma=Math.min(1,trauma+s/16);
+  if(s>5) sfx.thud(s); else sfx.slap(s);
+  if(s>7&&Math.random()<0.6) sfx.grunt(s);
+  if(s>9) ringT=Math.max(ringT,1.2);
+  if(s>7) flash(s/25);
+  panelDirty=true; visDirty=true;
+}
+function onLanding(v){
+  const h=v*v/19.62; if(v<6) return;
+  A.crouch=Math.max(A.crouch,clamp(v/11,0.3,1));
+  const ch=(a,b)=>smooth(a,b,v); let collapse=v>13;
+  for(const S of ['L','R']){
+    if(Math.random()<ch(7.5,13)*rnd(0.75,1.15)){ setBone('tibia'+S,v>14.5&&Math.random()<0.5?3:v>10?2:1); if(I.bone['tibia'+S]>=2) collapse=true; }
+    if(Math.random()<ch(10.5,17)*0.8){ setBone('femur'+S,v>17&&Math.random()<0.5?3:2); collapse=true; }
+    I.bruise['shin'+S]=clamp(I.bruise['shin'+S]+v/30,0,1); I.bruise['thigh'+S]=clamp(I.bruise['thigh'+S]+v/45,0,1);
+  }
+  if(Math.random()<ch(11.5,18)*0.7) setBone('pelvis',v>16?3:2);
+  if(Math.random()<ch(14,22)*0.7) setBone('spine',v>19?3:2);
+  if(Math.random()<ch(12,19)*0.6) setBone('ribs',v>17?3:2);
+  if(v>11 && Math.random()<ch(11,20)*0.8) concuss(v*0.62);
+  if(v>25 || (v>21&&Math.random()<ch(21,26))) die('Смертельное падение с высоты');
+  I.painSpike=Math.min(130,I.painSpike+v*4); I.adren=1; trauma=Math.min(1,trauma+clamp(v/14,0.2,1));
+  sfx.thud(v); sfx.scuff(v); if(v>8) sfx.grunt(v);
+  notify(`Приземление: ${v.toFixed(1)} м/с (≈${h.toFixed(1)} м)`,v>9?'bad':'warn');
+  if(v>8) flash(v/30);
+  panelDirty=true; visDirty=true;
+  if(collapse && !P.dead || I.bone.spine>=2 && !P.dead) startRagdoll(new THREE.Vector3(P.hv.x*0.6,-1,P.hv.y*0.6),{grace:0.35,ang:1.5});
+}
+function mangle(part){
+  I.mangled[part]=true; addWound(part,55); const bn=boneOf(part); I.bruise[part]=1; setBone(bn,3);
+  sfx.crack(); sfx.squelch(); notify(`${PART_RU[part][0].toUpperCase()+PART_RU[part].slice(1)}: тяжёлая травма — раздроблено!`,'bad');
+  I.painSpike=Math.min(130,I.painSpike+70); trauma=1; flash(0.6); panelDirty=true; visDirty=true;
+  painCurl(10);
+}
+function useItem(k){
+  if(P.dead||I.koT>0) return;
+  if(k==='band'){
+    if(!I.wounds.some(w=>!w.bandaged)){ notify('Перевязывать нечего (внутреннее кровотечение бинтом не остановить)','warn'); return; }
+    if(I.items.band<=0){ notify('Бинты закончились','warn'); return; }
+    I.items.band--; I.wounds.forEach(w=>w.bandaged=true); sfx.bandage(); notify('Раны перевязаны — кровь остановлена','good');
+  } else if(k==='pill'){
+    if(I.items.pill<=0){ notify('Обезболивающее закончилось','warn'); return; }
+    I.items.pill--; I.pill=90; I.curlT=Math.min(I.curlT,2); sfx.pill(); notify('Обезболивающее принято (90 с)','good');
+  } else if(k==='splint'){
+    let best=null,bs=1; for(const b in BONES){ if(b==='skull'||b==='ribs'||b==='spine') continue; if(I.bone[b]>=2&&!I.splint[b]&&I.bone[b]>=bs){ best=b; bs=I.bone[b]; } }
+    if(!best){ notify('Нет переломов для шины','warn'); return; }
+    if(I.items.splint<=0){ notify('Шины закончились','warn'); return; }
+    I.items.splint--; I.splint[best]=true; sfx.splint(); notify(`Шина наложена: ${BONES[best][0]}`,'good');
+  }
+  visDirty=true; panelDirty=true;
+}
+function fullHeal(){
+  resetInjuries(); I.items={band:3,pill:2,splint:2}; ringT=0;
+  sfx.heal(); notify('Вас вылечили в медпункте. Припасы пополнены.','good'); visDirty=true;
+}
+
+/* ================= МОДЕЛЬ ИГРОКА (гладкие меши, ткани, обувь, детали) ================= */
+const root=new THREE.Group(); scene.add(root);
+const PDEF={
+  pelvis:{par:null,pos:[0,.98,0],com:[0,0,0],mass:12,cols:[{t:'b',c:[0,0,0],h:[.175,.09,.105]}],band:[.37,.1,.23,0]},
+  torso:{par:'pelvis',pos:[0,.09,0],com:[0,.25,0],mass:26,cols:[{t:'b',c:[0,.25,0],h:[.195,.23,.12]}],band:[.41,.1,.26,.18]},
+  head:{par:'torso',pos:[0,.46,0],com:[0,.17,0],mass:5,cols:[{t:'b',c:[0,.17,0],h:[.095,.115,.105]}],band:[.2,.05,.22,.25]}
+};
+for(const [s,S] of [[1,'L'],[-1,'R']]){
+  PDEF['uArm'+S]={par:'torso',pos:[s*.255,.40,0],com:[0,-.145,0],mass:2.2,cols:[{t:'c',c:[0,-.145,0],hh:.095,r:.05}],band:[.12,.09,.12,-.145]};
+  PDEF['fArm'+S]={par:'uArm'+S,pos:[0,-.29,0],com:[0,-.18,0],mass:1.6,cols:[{t:'c',c:[0,-.18,0],hh:.138,r:.042}],band:[.1,.09,.1,-.13]};
+  PDEF['thigh'+S]={par:'pelvis',pos:[s*.09,-.07,0],com:[0,-.215,0],mass:8.5,cols:[{t:'c',c:[0,-.215,0],hh:.14,r:.075}],band:[.17,.1,.18,-.215]};
+  PDEF['shin'+S]={par:'thigh'+S,pos:[0,-.43,0],com:[0,-.22,0],mass:4.2,cols:[{t:'c',c:[0,-.2,0],hh:.142,r:.058,mf:.8},{t:'b',c:[0,-.44,.055],h:[.053,.038,.135],mf:.2}],band:[.13,.1,.14,-.2]};
+}
+const rig={};
+for(const n of ORDER){
+  const d=PDEF[n], g=new THREE.Group(); g.position.set(...d.pos);
+  (d.par?rig[d.par].group:root).add(g);
+  rig[n]={name:n,def:d,group:g,com:new THREE.Vector3(...d.com),rest:new THREE.Vector3(...d.pos),mats:[],kink:null,ks:Math.random()<0.5?1:-1,body:null,cols:[],saved:null,hist:new Float32Array(24),hi:0,peak:0,cool:0,shred:0,spkCd:0};
+}
+/* Точки контакта каждой кости (для точных проверок шредера): локальные точки относительно центра масс + радиус */
+for(const n of ORDER){
+  const p=rig[n]; p.pts=[];
+  for(const c of p.def.cols){
+    const cx0=c.c[0]-p.com.x, cy0=c.c[1]-p.com.y, cz0=c.c[2]-p.com.z;
+    if(c.t==='c'){ for(const k of [-0.9,0,0.9]) p.pts.push({v:new THREE.Vector3(cx0,cy0+c.hh*k,cz0),r:c.r+0.01}); }
+    else {
+      const [hx,hy,hz]=c.h;
+      if(hy>=hx){ const r=(hx+hz)/2*0.9, o=Math.max(0,hy-r); for(const k of [-1,1]) p.pts.push({v:new THREE.Vector3(cx0,cy0+o*k,cz0),r}); }
+      else p.pts.push({v:new THREE.Vector3(cx0,cy0,cz0),r:Math.max(hx,hy,hz)*0.6});
+    }
+  }
+}
+const SKIN='#d9a27f';
+/* ткани и материалы */
+const C_denim=clothSet('twill',401), C_jacket=clothSet('plain',402), C_rib=clothSet('rib',403), C_skin=skinSet(), C_leather=leatherSet(), C_pack=packSet(), C_pocket=pocketSet(), C_gauze=gauzeSet(), C_hair=hairSet();
+const clothMat=(hex,set,ns=.7)=>new THREE.MeshStandardMaterial({color:hex,map:set.map,normalMap:set.normal,normalScale:new THREE.Vector2(ns,ns),roughnessMap:set.orm,roughness:1});
+function partMat(n,hex,set,ns){ const m=clothMat(hex,set,ns); m.userData.base=new THREE.Color(hex); rig[n].mats.push(m); return m; }
+const fixedMat=(hex,r=.8,m=0)=>new THREE.MeshStandardMaterial({color:hex,roughness:r,metalness:m});
+const hairM=new THREE.MeshStandardMaterial({map:C_hair.map,normalMap:C_hair.normal,normalScale:new THREE.Vector2(.8,.8),roughnessMap:C_hair.orm,roughness:1,alphaMap:C_hair.alpha,alphaTest:.5,side:THREE.DoubleSide});
+const hairSolid=new THREE.MeshStandardMaterial({map:C_hair.map,normalMap:C_hair.normal,roughnessMap:C_hair.orm,roughness:1});
+
+/* loft — гладкая поверхность вращения по эллиптическим сечениям [y,rx,rz,cx,cz] (сверху вниз), без швов нормалей */
+function loft(secs,segs=24,o={}){
+  const N=secs.length, W=segs+1, pos=new Float32Array(N*W*3), uv=new Float32Array(N*W*2), idx=[], ys=[];
+  const tile=o.tile||.12; let maxR=0; for(const s of secs) maxR=Math.max(maxR,(s[1]+s[2])/2);
+  const nU=o.norm?1:Math.max(1,Math.round(Math.PI*2*maxR/tile)); let acc=0; const y0=secs[0][0], yN=secs[N-1][0];
+  for(let r=0;r<N;r++){
+    const s=secs[r], y=s[0], rx=s[1], rz=s[2], cx=s[3]||0, cz=s[4]||0; ys.push(y);
+    if(r>0){ const q=secs[r-1]; acc+=Math.hypot(y-q[0],(rx+rz)/2-(q[1]+q[2])/2); }
+    for(let k=0;k<W;k++){
+      const th=k/segs*Math.PI*2, i=r*W+k;
+      pos[i*3]=cx+rx*Math.sin(th); pos[i*3+1]=y; pos[i*3+2]=cz+rz*Math.cos(th);
+      uv[i*2]=k/segs*nU; uv[i*2+1]=o.norm?(y-yN)/((y0-yN)||1):acc/tile;
+    }
+  }
+  for(let r=0;r<N-1;r++) for(let k=0;k<segs;k++){ const a=r*W+k, b=a+1, c=a+W, d=c+1; idx.push(a,c,b,b,c,d); }
+  const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.BufferAttribute(pos,3)); g.setAttribute('uv',new THREE.BufferAttribute(uv,2)); g.setIndex(idx);
+  g.computeVertexNormals();
+  const nr=g.attributes.normal;
+  for(let r=0;r<N;r++){ const a=r*W, b=a+segs; let x=nr.getX(a)+nr.getX(b), y=nr.getY(a)+nr.getY(b), z=nr.getZ(a)+nr.getZ(b); const l=Math.hypot(x,y,z)||1; x/=l; y/=l; z/=l; nr.setXYZ(a,x,y,z); nr.setXYZ(b,x,y,z); }
+  g.userData={segs,ys}; return g;
+}
+function secAt(secs,y){
+  for(let i=0;i<secs.length-1;i++){ const a=secs[i], b=secs[i+1];
+    if(a[0]>=y&&b[0]<=y&&a[0]!==b[0]){ const t=(a[0]-y)/(a[0]-b[0]); return [0,1,2,3,4].map(k=>(a[k]||0)+((b[k]||0)-(a[k]||0))*t); } }
+  return secs[secs.length-1];
+}
+const ysSeg=(a,b,n)=>Array.from({length:n+1},(_,i)=>a+(b-a)*i/n);
+const kinkGroup=(p,y)=>{ const k=new THREE.Group(); k.position.y=y; p.group.add(k); p.kink=k; return k; };
+/* добавляет меш; если он ниже линии перелома — привязывает к нижней половине конечности */
+function place(p,m){ if(p.kink&&m.position.y<p.kink.position.y-1e-4){ m.position.y-=p.kink.position.y; p.kink.add(m); } else p.group.add(m); return m; }
+function addLoft(p,geo,mat,shadow=true){
+  const segs=geo.userData.segs, ys=geo.userData.ys, N=ys.length, per=segs*6;
+  const mkm=(g)=>{ const m=new THREE.Mesh(g,mat); m.castShadow=shadow; m.receiveShadow=true; return m; };
+  if(!p.kink){ p.group.add(mkm(geo)); return; }
+  const ky=p.kink.position.y; const k=ys.findIndex(y=>y<=ky+1e-6);
+  if(k===-1){ p.group.add(mkm(geo)); return; }
+  if(k===0){ const m=mkm(geo); m.position.y=-ky; p.kink.add(m); return; }
+  geo.setDrawRange(0,k*per); p.group.add(mkm(geo));
+  const g2=new THREE.BufferGeometry(); for(const a of ['position','normal','uv']) g2.setAttribute(a,geo.attributes[a]); g2.setIndex(geo.index); g2.setDrawRange(k*per,(N-1-k)*per);
+  const lo=mkm(g2); lo.position.y=-ky; p.kink.add(lo);
+}
+const SPH=new THREE.SphereGeometry(1,28,18);
+function put(par,geo,mat,x=0,y=0,z=0,o={}){
+  const m=new THREE.Mesh(geo,mat); m.position.set(x,y,z);
+  if(o.rot) m.rotation.set(o.rot[0],o.rot[1],o.rot[2]); if(o.scale) m.scale.set(o.scale[0],o.scale[1],o.scale[2]);
+  m.castShadow=o.cast!==false; m.receiveShadow=o.recv!==false;
+  if(par.group) place(par,m); else par.add(m); return m;
+}
+const ell=(par,mat,x,y,z,sx,sy,sz,o={})=>put(par,SPH,mat,x,y,z,Object.assign({scale:[sx,sy,sz]},o));
+const rbox=(w,h,d,r,seg=3)=>new RoundedBoxGeometry(w,h,d,seg,r);
+const lin=(a,b,t)=>a+(b-a)*t;
+const torusH=(R,t,seg=24)=>{ const g=new THREE.TorusGeometry(R,t,8,seg); g.rotateX(Math.PI/2); return g; };
+
+/* ---- ТАЗ: джинсы, ремень, пряжка, шлёвки, карманы ---- */
+const TS=[[.462,0,0,0,0],[.46,.035,.04,0,0],[.45,.055,.058,0,0],[.435,.105,.075,0,0],[.415,.16,.092,0,0],[.395,.2,.107,0,0],[.36,.211,.116,0,.002],[.30,.205,.123,0,.006],[.24,.19,.122,0,.008],[.17,.172,.114,0,.004],[.10,.162,.105,0,0],[.04,.164,.104,0,0],[0,.166,.105,0,0]];
+{
+  const p=rig.pelvis, g=p.group;
+  const jeans=partMat('pelvis','#34456a',C_denim,.9), jeansD=partMat('pelvis','#2b3a5c',C_pocket,.9);
+  addLoft(p,loft([[.10,0,0],[.10,.165,.10],[.06,.172,.105],[0,.176,.111],[-.05,.169,.108],[-.09,.15,.097],[-.105,.09,.06],[-.112,0,0]],28),jeans);
+  const beltM=clothMat('#26262b',C_leather,1), gold=fixedMat('#c8a644',.28,.9), silver=fixedMat('#d9dde2',.22,.95);
+  addLoft(p,loft([[.092,.172,.1065],[.088,.1785,.112],[.042,.1785,.112],[.038,.172,.1065]],28,{tile:.08}),beltM);
+  put(g,rbox(.046,.034,.008,.003,2),gold,0,.065,.1135,{recv:false}); put(g,rbox(.03,.02,.009,.003,2),silver,0,.065,.114,{recv:false});
+  put(g,new THREE.BoxGeometry(.004,.026,.01),gold,0,.065,.1185,{recv:false});
+  for(const a of [.5,-.5,1.35,-1.35,2.6,-2.6]){ const x=(.1785+.004)*Math.sin(a), z=(.112+.003)*Math.cos(a); put(g,new THREE.BoxGeometry(.017,.048,.009),jeans,x,.065,z,{rot:[0,a,0],recv:false}); }
+  for(const s of [-1,1]) put(g,rbox(.078,.088,.012,.004,2),jeansD,s*.062,-.012,-.1075,{rot:[0,-s*.24,0]});
+  put(g,new THREE.SphereGeometry(.0075,12,8),gold,0,.022,.1115,{recv:false}); put(g,new THREE.BoxGeometry(.003,.066,.0035),jeansD,0,-.015,.1115,{recv:false});
+}
+
+/* ---- ТОРС: куртка, воротник, молния, швы, рюкзак с лямками ---- */
+{
+  const p=rig.torso, g=p.group;
+  const jk=partMat('torso','#2f5f9a',C_jacket,.9), rib=partMat('torso','#254b7a',C_rib,.9);
+  addLoft(p,loft(TS,32),jk);
+  addLoft(p,loft([[.058,.169,.108],[.054,.1765,.1135],[.004,.1785,.1155],[0,.1735,.1105]],32,{tile:.06}),rib);
+  put(g,torusH(.07,.016,30),rib,0,.449,0,{scale:[1.12,1,.94]});
+  const fz=y=>{ const s=secAt(TS,y); return s[4]+s[2]; };
+  const metal=fixedMat('#c3c8cf',.3,.9), dkseam=fixedMat('#1f3f68',.9);
+  const zp=[]; for(let y=.012;y<=.432;y+=.03) zp.push(new THREE.Vector3(0,y,fz(y)+.0022));
+  put(g,new THREE.TubeGeometry(new THREE.CatmullRomCurve3(zp),40,.0035,6),metal,0,0,0,{recv:false});
+  put(g,rbox(.012,.034,.006,.002,2),metal,0,.398,fz(.398)+.006,{recv:false});
+  for(const s of [-1,1]){
+    const sp=[]; for(let y=.05;y<=.36;y+=.04){ const q=secAt(TS,y); sp.push(new THREE.Vector3(s*(q[1]+.0012),y,q[4])); }
+    put(g,new THREE.TubeGeometry(new THREE.CatmullRomCurve3(sp),24,.0026,5),dkseam,0,0,0,{recv:false});
+  }
+  const packM=clothMat('#ffffff',C_pack,.9), strapM=fixedMat('#26262b',.85), flapM=clothMat('#d9d2c8',C_pack,.9);
+  put(g,rbox(.27,.32,.11,.03),packM,0,.27,-.172);
+  put(g,rbox(.276,.1,.125,.035),flapM,0,.405,-.176);
+  put(g,rbox(.2,.13,.045,.018),packM,0,.2,-.235);
+  put(g,new THREE.BoxGeometry(.03,.07,.006),strapM,0,.2,-.2585,{recv:false});
+  for(const s of [-1,1]){
+    const surf=(y,x)=>{ const q=secAt(TS,y); const k=1-Math.min(.999,(x/q[1])**2); return Math.sqrt(k)*q[2]; };
+    const pts=[]; const x=.085;
+    for(const y of [.14,.22,.30,.38,.415,.43,.438]) pts.push(new THREE.Vector3(0,y,-(surf(y,x)+.0075)));
+    pts.push(new THREE.Vector3(0,.4475,0));
+    for(const y of [.438,.43,.415,.38,.32,.26]) pts.push(new THREE.Vector3(0,y,(surf(y,x)+.0075)));
+    const m=put(g,new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),48,.0105,8),strapM,s*x,0,0,{scale:[1.7,1,1],recv:false});
+  }
+}
+
+/* ---- ГОЛОВА: лицо, нос, губы, глаза, уши, брови, причёска ---- */
+const HS=[[.298,0,0,0,0],[.296,.03,.034,0,-.005],[.287,.056,.064,0,-.007],[.27,.078,.088,0,-.007],[.245,.091,.102,0,-.004],[.215,.094,.105,0,0],[.19,.093,.103,0,0],[.16,.089,.099,0,.003],[.13,.081,.093,0,.008],[.105,.068,.082,0,.017],[.082,.053,.068,0,.03],[.065,.04,.052,0,.04],[.055,.026,.034,0,.04],[.053,0,0,0,.04]];
+{
+  const p=rig.head, g=p.group, skin=partMat('head',SKIN,C_skin,.7);
+  addLoft(p,loft(HS,32,{tile:.1}),skin);
+  put(g,new THREE.CylinderGeometry(.041,.046,.12,20),skin,0,.015,0);
+  // нос, скулы, надбровья, уши
+  ell(g,skin,0,.186,.1035,.009,.011,.009,{recv:false}); ell(g,skin,0,.17,.107,.0105,.016,.0115,{recv:false}); ell(g,skin,0,.151,.1165,.0125,.0115,.0125,{recv:false});
+  for(const s of [-1,1]){ ell(g,skin,s*.012,.148,.109,.0085,.008,.009,{recv:false}); ell(g,skin,s*.052,.13,.082,.022,.02,.02); ell(g,skin,s*.092,.17,-.004,.008,.026,.019,{recv:false}); }
+  ell(g,skin,0,.214,.099,.085,.011,.012);
+  // рот
+  const lipM=fixedMat('#b5605a',.5), mouthM=fixedMat('#3a0f10',.6);
+  const lipU=new THREE.CapsuleGeometry(.0058,.03,4,10); lipU.rotateZ(Math.PI/2); const lipL=new THREE.CapsuleGeometry(.0065,.024,4,10); lipL.rotateZ(Math.PI/2);
+  put(g,lipU,lipM,0,.1095,.0995,{recv:false}); put(g,lipL,lipM,0,.0975,.0995,{recv:false});
+  p.mouth=put(g,new THREE.SphereGeometry(.0175,14,8),mouthM,0,.1035,.1005,{scale:[1,.3,.34],recv:false,cast:false});
+  // глаза
+  const white=fixedMat('#eceae6',.3), iris=fixedMat('#4a2f1d',.3), pupil=fixedMat('#050505',.2), brow=hairSolid;
+  const lids=[];
+  for(const s of [-1,1]){
+    ell(g,white,s*.04,.19,.089,.0105,.0105,.0105,{recv:false}); ell(g,iris,s*.04,.19,.0935,.0062,.0062,.0062,{recv:false,cast:false}); ell(g,pupil,s*.04,.19,.097,.003,.003,.003,{recv:false,cast:false});
+    const cap=new THREE.CapsuleGeometry(.0042,.034,4,8); cap.rotateZ(Math.PI/2);
+    put(g,cap,brow,s*.042,.2195,.0945,{rot:[0,0,s*-.14],recv:false});
+    const l=ell(g,skin,s*.04,.19,.091,.0128,.0098,.0118,{recv:false}); l.visible=false; lids.push(l);
+  }
+  p.lids=lids;
+  // причёска
+  const hy=[.285,.27,.25,.23,.21,.19,.17,.15,.13,.11];
+  const hs=[[.309,0,0,0,-.006],[.305,.03,.034,0,-.006],[.297,.052,.06,0,-.007]];
+  for(const y of hy){ const q=secAt(HS,Math.min(y,.296)); hs.push([y,q[1]+.007,q[2]+.007,q[3],q[4]-.002]); }
+  const hair=new THREE.Mesh(loft(hs,40,{norm:true}),hairM); hair.castShadow=true; hair.receiveShadow=true; g.add(hair);
+  for(const [x,y,z,rz] of [[-.045,.262,.096,.35],[0,.268,.1,0],[.045,.262,.096,-.35],[-.02,.265,.098,.15],[.025,.265,.098,-.15]]) put(g,SPH,hairSolid,x,y,z,{scale:[.026,.011,.02],rot:[.55,0,rz],recv:false});
+}
+
+/* ---- РУКИ: рукав куртки, кожа, дельтовидная, кисть с пальцами, часы ---- */
+const BONE_MAT=fixedMat('#f3ead2',.45), BLOOD_MAT=fixedMat('#5a0404',.22,0.05);
+for(const [s,S] of [[1,'L'],[-1,'R']]){
+  { // плечо
+    const p=rig['uArm'+S], g=p.group; kinkGroup(p,-.145);
+    const sl=partMat(p.name,'#2f5f9a',C_jacket,.9), sk=partMat(p.name,SKIN,C_skin,.7);
+    const armS=ysSeg(0,-.29,10).map(y=>{ const t=-y/.29, r=lin(.05,.038,t)+.003*Math.sin(Math.PI*Math.min(1,t*1.2)); return [y,r,r]; });
+    addLoft(p,loft(armS,24,{tile:.1}),sk);
+    const slY=[0,-.029,-.058,-.087,-.116,-.145,-.1695,-.194];
+    addLoft(p,loft(slY.map(y=>{ const r=lin(.0585,.0505,-y/.2); return [y,r*1.03,r]; }),26,{tile:.09}),sl);
+    ell(g,sl,0,0,0,.058,.06,.058);
+    put(p,torusH(.0525,.0058,26),sl,0,-.1965,0);
+  }
+  { // предплечье и кисть
+    const p=rig['fArm'+S], g=p.group; kinkGroup(p,-.13);
+    const sk=partMat(p.name,SKIN,C_skin,.7);
+    addLoft(p,loft(ysSeg(0,-.26,10).map(y=>{ const t=-y/.26, r=lin(.037,.026,t)+.005*Math.exp(-(((t-.15)/.2)**2)); return [y,r*1.04,r*.96]; }),24,{tile:.1}),sk);
+    ell(g,sk,0,0,0,.04,.04,.04);
+    const hg=new THREE.Group(); hg.position.y=-.26; g.add(hg);
+    put(hg,rbox(.07,.078,.031,.012,3),sk,0,-.04,0);
+    put(hg,SPH,sk,0,-.003,0,{scale:[.029,.02,.026]});
+    const fl=[[-.027,.034],[-.009,.039],[.009,.036],[.027,.029]];
+    fl.forEach(([x,len],i)=>{
+      const fg=new THREE.Group(); fg.position.set(x,-.076,0); fg.rotation.x=-.2-.05*i; hg.add(fg);
+      const c1=new THREE.CapsuleGeometry(.0085,len*.55,4,8); put(fg,c1,sk,0,-len*.3,0,{recv:false});
+      const f2=new THREE.Group(); f2.position.y=-len*.6; f2.rotation.x=-.35; fg.add(f2);
+      put(f2,new THREE.CapsuleGeometry(.0078,len*.5,4,8),sk,0,-len*.27,0,{recv:false});
+    });
+    const tg=new THREE.Group(); tg.position.set(-s*.037,-.024,.012); tg.rotation.set(-.35,0,-s*.5); hg.add(tg);
+    put(tg,new THREE.CapsuleGeometry(.0095,.024,4,8),sk,0,-.02,0,{recv:false});
+    const tg2=new THREE.Group(); tg2.position.y=-.04; tg2.rotation.x=-.3; tg.add(tg2); put(tg2,new THREE.CapsuleGeometry(.0085,.016,4,8),sk,0,-.012,0,{recv:false});
+    if(S==='L'){ // часы
+      const strap=fixedMat('#16161a',.7), face=fixedMat('#0a1620',.1,.3), cs=fixedMat('#9aa0a8',.3,.9);
+      put(p,torusH(.0308,.0066,28),strap,0,-.2,0,{scale:[1,1,1],recv:false});
+      const cy=new THREE.CylinderGeometry(.022,.022,.011,24); cy.rotateZ(Math.PI/2); put(p,cy,cs,.0325,-.2,0,{recv:false});
+      const fc=new THREE.CylinderGeometry(.0175,.0175,.003,24); fc.rotateZ(Math.PI/2); put(p,fc,face,.0388,-.2,0,{recv:false,cast:false});
+    }
+  }
+}
+
+/* ---- НОГИ: штанины, колено, манжета, носок, кроссовок ---- */
+const sockM=clothMat('#f1f1f1',C_rib,.8), shoeM=fixedMat('#ececec',.65), soleM=fixedMat('#1b1b1e',.95), midM=fixedMat('#f6f6f6',.5), redM=fixedMat('#d02020',.5), lace=fixedMat('#fafafa',.8);
+for(const [s,S] of [[1,'L'],[-1,'R']]){
+  { const p=rig['thigh'+S], g=p.group; kinkGroup(p,-.215);
+    const jn=partMat(p.name,'#34456a',C_denim,.9);
+    addLoft(p,loft(ysSeg(0,-.43,12).map(y=>{ const t=-y/.43, r=lin(.08,.056,t)+.004*Math.sin(Math.PI*t); return [y,r,r*1.04]; }),28),jn);
+    ell(g,jn,0,0,0,.081,.081,.081);
+  }
+  { const p=rig['shin'+S], g=p.group; kinkGroup(p,-.2);
+    const jn=partMat(p.name,'#34456a',C_denim,.9);
+    const ys=[...ysSeg(0,-.2,6),...ysSeg(-.2,-.385,6).slice(1)];
+    addLoft(p,loft(ys.map(y=>{ const t=-y/.385, r=lin(.056,.036,t)+.011*Math.exp(-(((t-.22)/.17)**2))+.003*smooth(.88,1,t); return [y,r,r*1.03]; }),26),jn);
+    ell(g,jn,0,0,0,.057,.057,.057);
+    put(p,torusH(.0395,.0058,26),jn,0,-.383,0);
+    const fg=new THREE.Group(); fg.position.y=-.40; g.add(fg); p.foot=fg;
+    put(fg,new THREE.CylinderGeometry(.037,.04,.075,18),sockM,0,.03,0);
+    put(fg,rbox(.102,.016,.272,.006,2),soleM,0,-.062,.058);
+    put(fg,rbox(.108,.03,.278,.013,3),midM,0,-.043,.058);
+    ell(fg,shoeM,0,-.005,.06,.052,.042,.135);
+    ell(fg,shoeM,0,-.012,-.03,.048,.04,.05);
+    ell(fg,midM,0,-.034,.17,.05,.03,.045);
+    put(fg,torusH(.036,.011,24),shoeM,0,.022,-.012,{scale:[1,1,1.15],rot:[-.2,0,0]});
+    put(fg,rbox(.045,.012,.085,.004,2),shoeM,0,.032,.035,{rot:[-.45,0,0],recv:false});
+    for(let i=0;i<4;i++){ const z=.035+i*.025; put(fg,new THREE.BoxGeometry(.058,.005,.007),lace,0,.036-i*.0012+.004,z,{recv:false,cast:false}); }
+    for(const q of [-1,1]) ell(fg,redM,q*.0505,-.003,.06,.004,.014,.055,{recv:false,cast:false});
+  }
+}
+/* ---- переломы, повязки, шины ---- */
+const BAND_GEO=scaleUV(new THREE.CylinderGeometry(1,1,1,28,1,true),4,1);
+const BAND_MAT=new THREE.MeshStandardMaterial({map:C_gauze.map,normalMap:C_gauze.normal,roughnessMap:C_gauze.orm,roughness:1,side:THREE.DoubleSide});
+const TAPE_MAT=fixedMat('#f2efe6',.8), SPLINT_WOOD=fixedMat('#b78a55',.8);
+const LIMBR={thigh:[.075,.43],shin:[.055,.385],uArm:[.052,.29],fArm:[.042,.26]};
+const BONE_SHAFT=new THREE.CylinderGeometry(.0105,.0125,.1,8), BONE_TIP=new THREE.ConeGeometry(.0115,.04,6);
+for(const n of ORDER){
+  const p=rig[n], d=p.def;
+  if(p.kink){
+    const bone=new THREE.Group(); bone.position.set(0,0,.052); bone.rotation.z=.12;
+    put(bone,BONE_SHAFT,BONE_MAT,0,0,0,{recv:false}); put(bone,BONE_TIP,BONE_MAT,0,.068,0,{recv:false}); put(bone,BONE_TIP,BONE_MAT,0,-.068,0,{rot:[Math.PI,0,0],recv:false});
+    const blood=put(p.kink,SPH,BLOOD_MAT,0,0,.04,{scale:[.042,.052,.017],recv:false}); blood.visible=false;
+    p.kink.add(bone); p.boneMesh=bone; p.bloodMesh=blood; bone.visible=false;
+    const key=n.replace(/[LR]$/,''), [R0,L0]=LIMBR[key];
+    const sg=new THREE.Group();
+    for(const q of [-1,1]) put(sg,rbox(.034,L0*.8,.014,.005,2),SPLINT_WOOD,0,-L0/2,q*(R0+.007));
+    for(const yy of [.22,.5,.78]) put(sg,torusH(R0+.004,.0065,22),TAPE_MAT,0,-L0*yy,0,{recv:false});
+    sg.visible=false; p.group.add(sg); p.splint=sg;
+  }
+  p.band=new THREE.Group(); p.band.position.y=d.band[3]; p.group.add(p.band);
+  for(let k=0;k<2;k++){ const m=new THREE.Mesh(BAND_GEO,BAND_MAT); m.scale.set(d.band[0]/2*(1+.04*k),d.band[1]*(k?.85:1),d.band[2]/2*(1+.04*k)); if(k) m.rotation.z=.22; m.receiveShadow=true; p.band.add(m); }
+  p.band.visible=false;
+}
+const PURPLE=new THREE.Color('#5b2d70'), REDC=new THREE.Color('#8b0e0e'), DEADC=new THREE.Color('#3a0505');
+function updateVisuals(){
+  visDirty=false;
+  for(const n of ORDER){
+    const p=rig[n], bone=boneOf(n), st=I.bone[bone]||0, w=I.wounds.find(x=>x.part===n);
+    if(p.kink){ const a=st>=2?(st===3?0.72:0.45):0; p.kink.rotation.set(a*0.45,0,a*p.ks); p.boneMesh.visible=p.bloodMesh.visible=st>=3; if(p.splint) p.splint.visible=!!I.splint[bone]; }
+    p.band.visible=!!(w&&w.bandaged);
+    const bl=I.mangled[n]?1:(w&&!w.bandaged?0.75:(st>=3?0.7:0));
+    for(const m of p.mats){ m.color.copy(m.userData.base).lerp(PURPLE,clamp(I.bruise[n]*0.65,0,0.65)); if(bl>0) m.color.lerp(I.mangled[n]?DEADC:REDC,bl*0.7); }
+  }
+}
+
+/* --- Поза/мир --- */
+const _m4=new THREE.Matrix4(), _m42=new THREE.Matrix4(), _sc=new THREE.Vector3(), ONE=new THREE.Vector3(1,1,1);
+function setGroupWorld(g,wp,wq){
+  const par=g.parent; par.updateWorldMatrix(true,false);
+  _m4.copy(par.matrixWorld).invert(); _m42.compose(wp,wq,ONE); _m4.multiply(_m42); _m4.decompose(g.position,g.quaternion,_sc);
+}
+function resetRestPose(){ for(const n of ORDER){ const p=rig[n]; p.group.position.copy(p.rest); p.group.quaternion.identity(); } }
+/* ================= СОСТОЯНИЕ ИГРОКА ================= */
+const SPAWN=new THREE.Vector3(0,0.02,0);
+const P={dwell:0,mode:'active',pos:SPAWN.clone(),yaw:0,vy:0,hv:new THREE.Vector2(),hSpeed:0,grounded:true,airT:0,dead:false,deadT:0,blend:0,flat:0,jumpBuf:0,coyote:0};
+const A={phase:0,sm:0,air:0,crouch:0,t:0,blink:2,stepIdx:-1,scream:false};
+const R={t:0,grace:0,voluntary:false,speed:0,selfOn:false,scream:false,curlSide:1,writhe:0};
+const playerBody=world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(0,0.92,0));
+const playerCol=world.createCollider(RAPIER.ColliderDesc.capsule(0.62,0.28).setFriction(0.4),playerBody);
+const cc=world.createCharacterController(0.02);
+cc.setUp({x:0,y:1,z:0}); cc.enableAutostep(0.36,0.12,false); cc.enableSnapToGround(0.3);
+cc.setMaxSlopeClimbAngle(55*Math.PI/180); cc.setMinSlopeSlideAngle(65*Math.PI/180); cc.setApplyImpulsesToDynamicBodies(true);
+try{ cc.setCharacterMass(75); }catch(e){}
+const _p=new THREE.Vector3(), _pp=new THREE.Vector3();
+let GT=0;
+function playerPos(){
+  if(P.mode==='ragdoll'&&rig.pelvis.body){ const t=rig.pelvis.body.translation(); return _pp.set(t.x,t.y,t.z); }
+  return _pp.copy(P.pos);
+}
+function surfaceAt(){
+  for(const c of conveyors) if(c.inBelt(P.pos,0.4)) return 'metal';
+  if(elevator&&Math.abs(P.pos.x-elevator.x)<1.6&&Math.abs(P.pos.z-elevator.z)<1.7&&Math.abs(P.pos.y-elevator.top)<0.4) return 'metal';
+  return 'concrete';
+}
+
+/* ================= КРОВЬ: частицы и лужи ================= */
+const NDEC=320, decGeo=new THREE.CircleGeometry(1,16); decGeo.rotateX(-Math.PI/2);
+const decMat=new THREE.MeshStandardMaterial({color:0x6b0707,roughness:.2,metalness:.1,transparent:true,opacity:.9,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2});
+const decInst=new THREE.InstancedMesh(decGeo,decMat,NDEC); decInst.frustumCulled=false; decInst.receiveShadow=true; scene.add(decInst);
+let decI=0; const _dm=new THREE.Matrix4(), _dq=new THREE.Quaternion(), _dp=new THREE.Vector3(), _ds=new THREE.Vector3();
+for(let i=0;i<NDEC;i++){ _dm.makeScale(0,0,0); decInst.setMatrixAt(i,_dm); }
+function addDecal(x,y,z,size){
+  _dq.setFromAxisAngle(Y_AXIS,Math.random()*6.28); _dp.set(x,y+0.012+(decI%7)*0.0007,z); _ds.set(size*rnd(0.7,1.3),1,size*rnd(0.7,1.3));
+  _dm.compose(_dp,_dq,_ds); decInst.setMatrixAt(decI,_dm); decInst.instanceMatrix.needsUpdate=true; decI=(decI+1)%NDEC;
+}
+const NP=600, bInst=new THREE.InstancedMesh(new THREE.SphereGeometry(0.028,8,6),new THREE.MeshStandardMaterial({color:0x7d0909,roughness:.2}),NP);
+bInst.frustumCulled=false; scene.add(bInst);
+const bp=new Float32Array(NP*3), bv=new Float32Array(NP*3), bl=new Float32Array(NP); let bi=0;
+function spawnBlood(x,y,z,vx,vy,vz,n=1,spread=1.2){
+  for(let k=0;k<n;k++){ const i=bi; bi=(bi+1)%NP; bp[i*3]=x; bp[i*3+1]=y; bp[i*3+2]=z; bv[i*3]=vx+rnd(-spread,spread); bv[i*3+1]=vy+rnd(-spread*0.5,spread); bv[i*3+2]=vz+rnd(-spread,spread); bl[i]=rnd(0.9,1.8); }
+}
+const _bm=new THREE.Matrix4(), _bs=new THREE.Vector3(), _bq=new THREE.Quaternion(), _bpp=new THREE.Vector3();
+function updateBlood(dt){
+  for(let i=0;i<NP;i++){
+    if(bl[i]>0){
+      bl[i]-=dt; bv[i*3+1]-=9.81*dt; bp[i*3]+=bv[i*3]*dt; bp[i*3+1]+=bv[i*3+1]*dt; bp[i*3+2]+=bv[i*3+2]*dt;
+      if(bp[i*3+1]<=0.02){ addDecal(bp[i*3],0,bp[i*3+2],rnd(0.05,0.19)); bl[i]=0; }
+    }
+    _bpp.set(bp[i*3],bp[i*3+1],bp[i*3+2]); const s=bl[i]>0?1:0; _bs.set(s,s,s); _bm.compose(_bpp,_bq,_bs); bInst.setMatrixAt(i,_bm);
+  }
+  bInst.instanceMatrix.needsUpdate=true;
+}
+function groundBelow(x,y,z){
+  const h=world.castRay(new RAPIER.Ray({x,y,z},{x:0,y:-1,z:0}),12,true,undefined,ENV_RAY,playerCol);
+  return h?y-(h.timeOfImpact!==undefined?h.timeOfImpact:h.toi):null;
+}
+
+/* ================= РЕГДОЛЛ (скелет с костями) ================= */
+const JOINTS=[['torso','pelvis','s'],['head','torso','s'],['uArmL','torso','s'],['uArmR','torso','s'],['fArmL','uArmL','h',-2.6,0.05],['fArmR','uArmR','h',-2.6,0.05],
+  ['thighL','pelvis','s'],['thighR','pelvis','s'],['shinL','thighL','h',-0.05,2.6],['shinR','thighR','h',-0.05,2.6]];
+const pbit=n=>1<<(ORDER.indexOf(n)+1);
+const ADJ={}; for(const n of ORDER) ADJ[n]=0;
+for(const [c,pn] of JOINTS){ ADJ[c]|=pbit(pn); ADJ[pn]|=pbit(c); }
+const ragGroups=(n,self)=>((pbit(n)<<16)|(self?(0xFFFF&~pbit(n)&~ADJ[n]):NOSELF_FILTER))>>>0;
+function startRagdoll(vel,o={}){
+  if(P.mode!=='active') return;
+  root.updateMatrixWorld(true);
+  const wp=new THREE.Vector3(), wq=new THREE.Quaternion(), poses={};
+  for(const n of ORDER){ const p=rig[n]; p.group.matrixWorld.decompose(wp,wq,_sc); poses[n]={pos:p.com.clone().applyQuaternion(wq).add(wp),q:wq.clone()}; }
+  root.position.set(0,0,0); root.rotation.set(0,0,0); root.scale.set(1,1,1);
+  const am=o.ang!==undefined?o.ang:0.8;
+  for(const n of ORDER){
+    const p=rig[n], d=p.def, ps=poses[n];
+    const rb=world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(ps.pos.x,ps.pos.y,ps.pos.z).setRotation({x:ps.q.x,y:ps.q.y,z:ps.q.z,w:ps.q.w})
+      .setLinvel(vel.x,vel.y,vel.z).setAngvel({x:rnd(-1,1)*am,y:rnd(-1,1)*am,z:rnd(-1,1)*am}).setLinearDamping(0.08).setAngularDamping(1.5).setCanSleep(false));
+    p.cols=[];
+    for(const c of d.cols){
+      const cd=c.t==='b'?RAPIER.ColliderDesc.cuboid(c.h[0],c.h[1],c.h[2]):RAPIER.ColliderDesc.capsule(c.hh,c.r);
+      cd.setTranslation(c.c[0]-p.com.x,c.c[1]-p.com.y,c.c[2]-p.com.z).setFriction(0.9).setRestitution(0.05).setMass(d.mass*(c.mf||1)).setCollisionGroups(ragGroups(n,false));
+      p.cols.push(world.createCollider(cd,rb));
+    }
+    p.body=rb; p.peak=0; p.cool=0; p.shred=0; p.hi=0; p.spkCd=0;
+    for(let i=0;i<8;i++){ p.hist[i*3]=vel.x; p.hist[i*3+1]=vel.y; p.hist[i*3+2]=vel.z; }
+  }
+  for(const [c,pn,type,lo,hi] of JOINTS){
+    const pc=rig[pn], ch=rig[c];
+    const a1={x:ch.rest.x-pc.com.x,y:ch.rest.y-pc.com.y,z:ch.rest.z-pc.com.z}, a2={x:-ch.com.x,y:-ch.com.y,z:-ch.com.z};
+    let data;
+    if(type==='h'){ data=RAPIER.JointData.revolute(a1,a2,{x:1,y:0,z:0}); data.limitsEnabled=true; data.limits=[lo,hi]; }
+    else data=RAPIER.JointData.spherical(a1,a2);
+    world.createImpulseJoint(data,pc.body,ch.body,true);
+  }
+  playerCol.setEnabled(false);
+  P.mode='ragdoll'; R.t=0; R.grace=o.grace!==undefined?o.grace:0.25; R.voluntary=!!o.voluntary; R.speed=vel.length(); P.blend=0; R.selfOn=false; R.scream=A.scream; P.dwell=0;
+}
+function enableSelfCollision(){
+  R.selfOn=true;
+  for(const n of ORDER){ const p=rig[n]; if(!p.body) continue; const g=ragGroups(n,true); for(const c of p.cols) c.setCollisionGroups(g); }
+}
+function destroyRagdoll(){ for(const n of ORDER){ const p=rig[n]; if(p.body){ world.removeRigidBody(p.body); p.body=null; p.cols=[]; } } }
+const _q0=new THREE.Quaternion();
+function syncRagdoll(){
+  for(const n of ORDER){
+    const p=rig[n], b=p.body; if(!b) return;
+    const t=b.translation(), r=b.rotation(); _q0.set(r.x,r.y,r.z,r.w);
+    _p.copy(p.com).applyQuaternion(_q0); _p.set(t.x-_p.x,t.y-_p.y,t.z-_p.z);
+    setGroupWorld(p.group,_p,_q0);
+  }
+}
+const _qa=new THREE.Quaternion(), _qb=new THREE.Quaternion(), _qc=new THREE.Quaternion(), _eu=new THREE.Euler(), _tv=new THREE.Vector3();
+const TONE=[['torso','pelvis',24,3.6,0.3],['head','torso',2.2,0.34,0.3],['thighL','pelvis',5,0.9,0],['thighR','pelvis',5,0.9,0],['uArmL','torso',1.0,0.2,0],['uArmR','torso',1.0,0.2,0]];
+function applyTone(dt,tone){
+  for(const [c,pn,k,d,minT] of TONE){
+    const bc=rig[c].body, bp2=rig[pn].body; if(!bc||!bp2) continue;
+    const qc=bc.rotation(), qp=bp2.rotation();
+    _qa.set(qp.x,qp.y,qp.z,qp.w).invert(); _qb.set(qc.x,qc.y,qc.z,qc.w).multiply(_qa);
+    if(_qb.w<0){ _qb.x=-_qb.x; _qb.y=-_qb.y; _qb.z=-_qb.z; _qb.w=-_qb.w; }
+    const ang=2*Math.acos(clamp(_qb.w,-1,1)), sn=Math.sqrt(Math.max(0,1-_qb.w*_qb.w));
+    let ex=0,ey=0,ez=0; if(sn>1e-4){ ex=_qb.x/sn*ang; ey=_qb.y/sn*ang; ez=_qb.z/sn*ang; }
+    const t=Math.max(tone,minT), wc=bc.angvel(), wp=bp2.angvel(), dd=d*(0.3+0.7*t), kk=k*t;
+    const tx=(-kk*ex-dd*(wc.x-wp.x))*dt, ty=(-kk*ey-dd*(wc.y-wp.y))*dt, tz=(-kk*ez-dd*(wc.z-wp.z))*dt;
+    bc.applyTorqueImpulse({x:tx,y:ty,z:tz},true); bp2.applyTorqueImpulse({x:-tx,y:-ty,z:-tz},true);
+  }
+}
+/* Лимиты суставов (по осям, в системе родителя): не дают скелету складываться в «блин» */
+const LIMS=[
+  ['torso','pelvis',150,14,2.5,[-0.55,1.1],[-0.7,0.7],[-0.5,0.5]],
+  ['head','torso',16,0.9,0.25,[-0.9,0.85],[-1.1,1.1],[-0.6,0.6]],
+  ['thighL','pelvis',90,6,1.2,[-2.1,0.6],[-0.7,0.7],[-0.35,0.9]],
+  ['thighR','pelvis',90,6,1.2,[-2.1,0.6],[-0.7,0.7],[-0.9,0.35]],
+  ['uArmL','torso',32,1.6,0.35,[-3.1,1.2],[-1.3,1.3],[-0.4,3.0]],
+  ['uArmR','torso',32,1.6,0.35,[-3.1,1.2],[-1.3,1.3],[-3.0,0.4]]
+];
+function applyLimits(dt){
+  for(const [c,pn,k,d,mx,lx,ly,lz] of LIMS){
+    const bc=rig[c].body, bp2=rig[pn].body; if(!bc||!bp2) continue;
+    const qc=bc.rotation(), qp=bp2.rotation();
+    _qa.set(qp.x,qp.y,qp.z,qp.w); _qc.copy(_qa).invert(); _qb.copy(_qc).multiply(_q0.set(qc.x,qc.y,qc.z,qc.w));
+    _eu.setFromQuaternion(_qb,'XYZ');
+    const ex=_eu.x-clamp(_eu.x,lx[0],lx[1]), ey=_eu.y-clamp(_eu.y,ly[0],ly[1]), ez=_eu.z-clamp(_eu.z,lz[0],lz[1]);
+    if(ex===0&&ey===0&&ez===0) continue;
+    _tv.set(-k*ex,-k*ey,-k*ez).applyQuaternion(_qa);
+    const wc=bc.angvel(), wp=bp2.angvel();
+    _tv.x-=d*(wc.x-wp.x); _tv.y-=d*(wc.y-wp.y); _tv.z-=d*(wc.z-wp.z);
+    _tv.multiplyScalar(dt); const l=_tv.length(); if(l>mx) _tv.multiplyScalar(mx/l);
+    bc.applyTorqueImpulse({x:_tv.x,y:_tv.y,z:_tv.z},true); bp2.applyTorqueImpulse({x:-_tv.x,y:-_tv.y,z:-_tv.z},true);
+  }
+}
+/* PD-контроль позы: цель — локальные углы Эйлера сустава относительно родителя */
+function pdPose(dt,list){
+  for(const [c,pn,ex,ey,ez,k,d,mx] of list){
+    const bc=rig[c].body, bp2=rig[pn].body; if(!bc||!bp2) continue;
+    const qc=bc.rotation(), qp=bp2.rotation();
+    _qa.set(qp.x,qp.y,qp.z,qp.w); _eu.set(ex,ey,ez,'XYZ'); _qb.setFromEuler(_eu); _qa.multiply(_qb);   // желаемая мировая ориентация
+    _qc.set(qc.x,qc.y,qc.z,qc.w).invert(); _qa.multiply(_qc);                                          // ошибка = желаемая * текущая^-1
+    if(_qa.w<0){ _qa.x=-_qa.x; _qa.y=-_qa.y; _qa.z=-_qa.z; _qa.w=-_qa.w; }
+    const ang=2*Math.acos(clamp(_qa.w,-1,1)), sn=Math.sqrt(Math.max(0,1-_qa.w*_qa.w));
+    let wx=0,wy=0,wz=0; if(sn>1e-4){ wx=_qa.x/sn*ang; wy=_qa.y/sn*ang; wz=_qa.z/sn*ang; }
+    const wc=bc.angvel(), wp=bp2.angvel();
+    _tv.set(k*wx-d*(wc.x-wp.x),k*wy-d*(wc.y-wp.y),k*wz-d*(wc.z-wp.z));
+    const l=_tv.length(); if(l>mx) _tv.multiplyScalar(mx/l);
+    _tv.multiplyScalar(dt);
+    bc.applyTorqueImpulse({x:_tv.x,y:_tv.y,z:_tv.z},true); bp2.applyTorqueImpulse({x:-_tv.x,y:-_tv.y,z:-_tv.z},true);
+  }
+}
+/* Поза эмбриона: торс и голова согнуты, колени к груди, руки обнимают тело, дрожь и судороги */
+function applyCurl(dt){
+  const t=R.t, sd=R.curlSide, tr=Math.sin(t*7.5);
+  pdPose(dt,[
+    ['torso','pelvis',0.95+0.06*tr,0,0,55,6,70],
+    ['head','torso',0.6+0.05*Math.sin(t*5),0,0,9,1,10],
+    ['thighL','pelvis',-1.95+0.1*Math.sin(t*7.5),0,-0.12,32,3,50],
+    ['thighR','pelvis',-1.95+0.1*Math.sin(t*7.5+1.3),0,0.12,32,3,50],
+    ['shinL','thighL',2.35,0,0,14,1.6,25],
+    ['shinR','thighR',2.35,0,0,14,1.6,25],
+    ['uArmL','torso',-1.1,0,-0.45,8,0.9,15],
+    ['uArmR','torso',-1.1,0,0.45,8,0.9,15],
+    ['fArmL','uArmL',-2.3,0,0,5,0.6,10],
+    ['fArmR','uArmR',-2.3,0,0,5,0.6,10]
+  ]);
+  const pb=rig.pelvis.body, q=pb.rotation();
+  _q0.set(q.x,q.y,q.z,q.w);
+  _tv.set(0,1,0).applyQuaternion(_q0);
+  if(_tv.y>0.5){ // валим на бок
+    _tv.set(0,0,1).applyQuaternion(_q0);
+    pb.applyTorqueImpulse({x:_tv.x*sd*10*dt,y:_tv.y*sd*10*dt,z:_tv.z*sd*10*dt},true);
+  }
+  R.writhe-=dt;
+  if(R.writhe<=0){
+    R.writhe=rnd(0.7,1.6);
+    pb.applyImpulse({x:rnd(-1,1)*4,y:Math.random()<0.3?3:0,z:rnd(-1,1)*4},true);
+    pb.applyTorqueImpulse({x:rnd(-1,1)*0.6,y:rnd(-1,1)*0.6,z:rnd(-1,1)*0.6},true);
+    if(Math.random()<0.5) sfx.groan();
+  }
+  trauma=Math.max(trauma,0.08);
+}
+function crawl(dt){
+  const f=((keys.KeyW||keys.ArrowUp)?1:0)-((keys.KeyS||keys.ArrowDown)?1:0), r=((keys.KeyD||keys.ArrowRight)?1:0)-((keys.KeyA||keys.ArrowLeft)?1:0);
+  if(!f&&!r) return;
+  const sy=Math.sin(camYaw), cy=Math.cos(camYaw); let dx=r*cy-f*sy, dz=-r*sy-f*cy; const l=Math.hypot(dx,dz); dx/=l; dz/=l;
+  const acc=I.paralyzed?8:11;
+  for(const n of ORDER){ const b=rig[n].body; const v=b.linvel(); if(Math.hypot(v.x,v.z)>(I.paralyzed?0.55:0.95)) continue; const m=rig[n].def.mass*acc*dt; b.applyImpulse({x:dx*m,y:0,z:dz*m},true); }
+}
+/* Точная проверка касания кости с валками шредера (по точкам кости и реальному объёму зубьев) */
+const _sq=new THREE.Quaternion(), _sv=new THREE.Vector3();
+function touchShred(p,b,tr){
+  for(const s of shredders){
+    if(Math.abs(tr.x-s.cx)>s.w/2+1||Math.abs(tr.z-s.cz)>s.d/2+1.5||tr.y>s.h+1.2) continue;
+    const r=b.rotation(); _sq.set(r.x,r.y,r.z,r.w);
+    for(const pt of p.pts){
+      _sv.copy(pt.v).applyQuaternion(_sq); _sv.x+=tr.x; _sv.y+=tr.y; _sv.z+=tr.z;
+      if(s.hit(_sv,pt.r,0.08)) return true;
+    }
+  }
+  return false;
+}
+function onPartHit(n,pk,tr,v){
+  partImpact(n,pk*0.95);
+  if(pk>9) spawnBlood(tr.x,tr.y,tr.z,v.x*0.15,1.5,v.z*0.15,clamp(pk|0,3,16),1.8);
+}
+function ragdollTick(dt){
+  R.t+=dt; R.grace-=dt;
+  if(!R.selfOn&&R.t>0.18) enableSelfCollision();
+  if(I.koT>0) I.curlT=0;
+  const curling=!P.dead&&I.koT<=0&&I.curlT>0;
+  if(curling){ I.curlT=Math.max(0,I.curlT-dt); applyCurl(dt); }
+  else applyTone(dt,P.dead?0.1:I.koT>0?0.15:(R.voluntary?0.6:0.35));
+  applyLimits(dt);
+  if(!P.dead&&I.koT<=0&&I.curlT<=0&&!canStand()) crawl(dt);
+  let bad=false, sumSp=0;
+  for(const n of ORDER){
+    const p=rig[n], b=p.body, v=b.linvel(), tr=b.translation();
+    if(!isFinite(tr.x+tr.y+tr.z+v.x+v.y+v.z)){ bad=true; break; }
+    const s2=v.x*v.x+v.y*v.y+v.z*v.z; if(s2>2500){ const k=50/Math.sqrt(s2); b.setLinvel({x:v.x*k,y:v.y*k,z:v.z*k},true); }
+    sumSp+=Math.sqrt(s2);
+    const H=p.hist, oi=p.hi*3;
+    const dvx=v.x-H[oi], dvy=v.y-H[oi+1]+9.81*8*dt, dvz=v.z-H[oi+2];
+    H[oi]=v.x; H[oi+1]=v.y; H[oi+2]=v.z; p.hi=(p.hi+1)%8;
+    const d=Math.sqrt(dvx*dvx+dvy*dvy+dvz*dvz);
+    if(R.grace>0){ p.peak=0; p.cool=0.12; }
+    else if(p.cool>0) p.cool-=dt;
+    else if(d>p.peak) p.peak=d;
+    else if(p.peak>3.2&&d<p.peak*0.85){ const pk=p.peak; p.peak=0; p.cool=0.4; onPartHit(n,pk,tr,v); }
+    else if(d<2.5) p.peak=0;
+    _p.set(tr.x,tr.y,tr.z);
+    p.spkCd-=dt;
+    for(const z of spikeZones) if(p.spkCd<=0&&tr.y<0.5&&Math.abs(tr.x-z.x)<z.w/2&&Math.abs(tr.z-z.z)<z.d/2){ p.spkCd=1.4; addWound(n,4); spawnBlood(tr.x,tr.y,tr.z,0,2,0,5,1.2); sfx.stab(); I.painSpike=Math.min(130,I.painSpike+12); }
+    if(!touchShred(p,b,tr)) p.shred=Math.max(0,p.shred-dt*1.2);
+    else {
+      p.shred+=dt; b.applyImpulse({x:0,y:-p.def.mass*14*dt,z:0},true);
+      if(Math.random()<0.45) spawnBlood(tr.x,tr.y+0.2,tr.z,rnd(-2,2),rnd(2,5),rnd(-2,2),1,1.5);
+      if(p.shred>0.25&&!I.mangled[n]) mangle(n);
+      if(p.shred>0.9&&(n==='torso'||n==='head'||n==='pelvis')) die('Перемолот шредером');
+      trauma=Math.max(trauma,0.35);
+    }
+    for(const c of conveyors) if(c.inBelt(_p,0.5)){ b.applyImpulse({x:0,y:0,z:(c.vz-v.z)*p.def.mass*Math.min(1,5*dt)},true); }
+    for(const pr of presses) if(pr.vy<-3&&Math.abs(tr.x-pr.cx)<1.7&&Math.abs(tr.z-pr.cz)<1.7&&tr.y+0.12>pr.yb&&tr.y-0.12<pr.prevYb+0.8){ crush('Раздавлен гидравлическим прессом'); return; }
+  }
+  if(bad){ notify('Сбой физики — перезапуск','warn'); respawn(); return; }
+  R.speed=sumSp/ORDER.length;
+  const pt=rig.pelvis.body.translation();
+  if(!R.scream&&!P.dead&&I.koT<=0&&rig.pelvis.body.linvel().y<-14){ R.scream=true; sfx.scream(); }
+  for(const pad of pads){ if(pad.cool>0) continue; if(Math.hypot(pt.x-pad.x,pt.z-pad.z)<pad.r+0.3&&pt.y<0.75){
+    for(const n of ORDER){ const b=rig[n].body, v=b.linvel(); b.setLinvel({x:v.x,y:Math.max(v.y,pad.power*0.9),z:v.z},true); } pad.cool=0.8; sfx.boing(); } }
+  if(pt.y<-30) respawn();
+}
+
+function canGetUp(){ return P.mode==='ragdoll'&&!P.dead&&I.koT<=0&&I.curlT<=0&&canStand()&&R.t>0.8&&R.speed<1.3&&I.consc>25; }
+function standUp(){
+  const pb=rig.pelvis.body, tb=rig.torso.body, tr=pb.translation(), tq=tb.rotation();
+  const q=new THREE.Quaternion(tq.x,tq.y,tq.z,tq.w), fr=new THREE.Vector3(0,0,1).applyQuaternion(q), up=new THREE.Vector3(0,1,0).applyQuaternion(q);
+  let fx=fr.x, fz=fr.z; if(Math.hypot(fx,fz)<Math.hypot(up.x,up.z)){ const sg=fr.y>0?-1:1; fx=up.x*sg; fz=up.z*sg; }
+  const yaw=Math.atan2(fx,fz); let gy=groundBelow(tr.x,tr.y+0.6,tr.z); if(gy===null) gy=0;
+  const wp=new THREE.Vector3(), wq=new THREE.Quaternion(), W={};
+  root.updateMatrixWorld(true);
+  for(const n of ORDER){ rig[n].group.matrixWorld.decompose(wp,wq,_sc); W[n]={p:wp.clone(),q:wq.clone()}; }
+  P.pos.set(tr.x,gy+0.02,tr.z); P.yaw=yaw; root.position.copy(P.pos); root.rotation.set(0,yaw,0); root.scale.set(1,1,1); root.updateMatrixWorld(true);
+  for(const n of ORDER){ setGroupWorld(rig[n].group,W[n].p,W[n].q); rig[n].saved={pos:rig[n].group.position.clone(),quat:rig[n].group.quaternion.clone()}; }
+  destroyRagdoll();
+  playerBody.setTranslation({x:P.pos.x,y:P.pos.y+0.9,z:P.pos.z},true); playerBody.setNextKinematicTranslation({x:P.pos.x,y:P.pos.y+0.9,z:P.pos.z});
+  playerCol.setEnabled(true);
+  P.mode='active'; P.vy=-1; P.hv.set(0,0); P.blend=1; P.airT=0; P.grounded=true; P.hSpeed=0; A.crouch=0; A.air=0; A.sm=0; A.scream=false; P.dwell=0;
+  sfx.scuff(8); notify('Вы поднялись','good');
+}
+function crush(why){
+  if(P.mode==='crushed') return;
+  const pp=playerPos().clone();
+  destroyRagdoll(); playerCol.setEnabled(false);
+  P.mode='crushed'; P.flat=0; P.pos.copy(pp);
+  if(!P.dead){ P.dead=true; I.deathWhy=why; P.deadT=0; }
+  I.curlT=0;
+  sfx.slam(); sfx.squelch(); sfx.death(); trauma=1; flash(0.85); notify(why,'bad');
+  for(let i=0;i<70;i++) spawnBlood(pp.x,0.25,pp.z,rnd(-4,4),rnd(0.5,4),rnd(-4,4),1,1);
+  for(let i=0;i<6;i++) addDecal(pp.x+rnd(-0.6,0.6),0,pp.z+rnd(-0.6,0.6),rnd(0.4,1.1));
+  for(const n of ORDER){ I.bruise[n]=1; } visDirty=true; panelDirty=true;
+}
+function respawn(){
+  destroyRagdoll(); resetInjuries(); P.mode='active'; P.dead=false; P.deadT=0; P.dwell=0; root.scale.set(1,1,1);
+  P.pos.copy(SPAWN); P.vy=0; P.hv.set(0,0); P.yaw=0; P.grounded=true; P.airT=0; P.blend=0; P.hSpeed=0; A.sm=0; A.air=0; A.crouch=0; A.scream=false; R.scream=false;
+  root.position.copy(P.pos); root.rotation.set(0,0,0); resetRestPose();
+  playerBody.setTranslation({x:0,y:0.92,z:0},true); playerBody.setNextKinematicTranslation({x:0,y:0.92,z:0}); playerCol.setEnabled(true);
+  camYaw=Math.PI; camPitch=0.32; trauma=0; $('death').style.display='none'; updateVisuals();
+  resetAudioFx(); renderer.domElement.style.filter=''; lastBlur=-1;
+}
+
+/* ================= АКТИВНЫЙ РЕЖИМ (ходьба) ================= */
+const SAMPLES=[[0.2,0.22],[0.55,0.22],[0.95,0.25],[1.3,0.25],[1.65,0.2]];
+/* Сферы тела для шредера: (высота над ногами, радиус) — компактнее «ударных» сэмплов */
+const SH_SAMPLES=[[0.1,0.1],[0.45,0.14],[0.9,0.17],[1.35,0.17],[1.7,0.11]];
+function moveMult(){
+  const pen=Math.max(legPen('L'),legPen('R')); let m=1-0.58*pen;
+  m*=1-0.28*clamp(I.pain/160,0,1); if(I.concussion>40) m*=0.9; if(I.bone.ribs>=2) m*=0.88; return m;
+}
+function hazardHit(h,height,vel){
+  if(h.kind==='press'){ crush('Раздавлен гидравлическим прессом'); return; }
+  const sp=vel.length();
+  let part=height>1.5?'head':height>1.1?'torso':height>0.8?'pelvis':height>0.4?'thigh':'shin';
+  const left=new THREE.Vector3(Math.cos(P.yaw),0,-Math.sin(P.yaw)); const side=left.dot(vel)<0?'L':'R';
+  if(part==='thigh'||part==='shin') part+=side;
+  const imp=sp*1.4;
+  startRagdoll(vel.clone().multiplyScalar(0.62).add(new THREE.Vector3(P.hv.x*0.4,1.6+sp*0.12,P.hv.y*0.4)),{grace:0.3,ang:4});
+  partImpact(part,imp);
+  if(part==='torso'){ partImpact('pelvis',imp*0.45); partImpact('uArm'+side,imp*0.55); }
+  else if(part==='head') partImpact('torso',imp*0.4);
+  else if(part==='pelvis'){ partImpact('torso',imp*0.4); partImpact('thigh'+side,imp*0.5); }
+  else partImpact('pelvis',imp*0.3);
+  if(h.kind==='spikes'){ addWound(part,10); sfx.stab(); } else sfx.clang(sp);
+  if(imp>8) spawnBlood(P.pos.x,P.pos.y+height,P.pos.z,vel.x*0.2,2,vel.z*0.2,clamp(imp|0,4,18),2);
+  notify(h.kind==='spikes'?'Вы напоролись на шипы!':`Удар: ${sp.toFixed(1)} м/с`,'bad');
+}
+function activeTick(dt){
+  const f=((keys.KeyW||keys.ArrowUp)?1:0)-((keys.KeyS||keys.ArrowDown)?1:0), r=((keys.KeyD||keys.ArrowRight)?1:0)-((keys.KeyA||keys.ArrowLeft)?1:0);
+  const sy=Math.sin(camYaw), cy=Math.cos(camYaw);
+  let dx=r*cy-f*sy, dz=-r*sy-f*cy; const len=Math.hypot(dx,dz); if(len>1){ dx/=len; dz/=len; }
+  const moving=len>0.05;
+  if(I.concussion>45&&moving){ const a=Math.sin(GT*1.3)*0.4*(I.concussion/100), c=Math.cos(a), s=Math.sin(a); const nx=dx*c-dz*s, nz=dx*s+dz*c; dx=nx; dz=nz; }
+  const pen=Math.max(legPen('L'),legPen('R'));
+  let spd=4.2;
+  const wantSprint=(keys.ShiftLeft||keys.ShiftRight)&&moving&&P.grounded;
+  const canSpr=!I.sprintLock&&I.stamina>0&&pen<0.3&&I.bone.ribs<2;
+  if(wantSprint&&canSpr){ spd=6.6; I.stamina-=(I.bone.ribs>=1?34:20)*dt; if(I.stamina<=0){ I.stamina=0; I.sprintLock=true; } }
+  else { I.stamina=Math.min(100,I.stamina+(I.bone.ribs>=2?7:15)*dt); if(I.sprintLock&&I.stamina>25) I.sprintLock=false; }
+  if(keys.KeyC) spd=1.7;
+  spd*=moveMult();
+  const acc=(P.grounded?30:4)*dt;
+  P.hv.x+=clamp(dx*spd-P.hv.x,-acc,acc); P.hv.y+=clamp(dz*spd-P.hv.y,-acc,acc);
+  P.jumpBuf-=dt; P.coyote=P.grounded?0.1:P.coyote-dt;
+  let vy=P.vy;
+  if(P.jumpBuf>0&&P.coyote>0&&pen<0.5&&I.bone.spine<2){ vy=5.0*(1-0.35*pen); P.jumpBuf=0; P.coyote=0; P.grounded=false; sfx.jump(); if(pen>0.05){ I.painSpike+=12+pen*30; sfx.groan(); } }
+  vy=Math.max(vy-9.81*dt,-70);
+  let platDy=0;
+  if(elevator&&Math.abs(P.pos.x-elevator.x)<elevator.w/2&&Math.abs(P.pos.z-elevator.z)<elevator.d/2&&Math.abs(P.pos.y-elevator.top)<0.4) platDy=elevator.dy;
+  let cvz=0; if(P.grounded) for(const c of conveyors) if(c.inBelt(P.pos,0.4)) cvz+=c.vz;
+  cc.computeColliderMovement(playerCol,{x:P.hv.x*dt,y:vy*dt+platDy,z:(P.hv.y+cvz)*dt});
+  const m=cc.computedMovement(), gr=cc.computedGrounded();
+  P.pos.x+=m.x; P.pos.y+=m.y; P.pos.z+=m.z;
+  if(vy>0&&m.y<vy*dt+platDy-0.002) vy=0;
+  let landed=false;
+  if(gr&&vy<0){ if(!P.grounded&&P.airT>0.1&&vy<-5.5){ landed=true; onLanding(-vy); } vy=-1; }
+  if(gr) P.airT=0; else P.airT+=dt;
+  if(!gr&&vy<-14&&!A.scream&&!P.dead&&I.koT<=0){ A.scream=true; sfx.scream(); }
+  if(gr&&!landed) A.scream=false;
+  P.grounded=gr; P.vy=vy;
+  P.hSpeed=Math.min(Math.hypot(P.hv.x,P.hv.y),Math.hypot(m.x,m.z-cvz*dt)/dt+0.3);
+  playerBody.setNextKinematicTranslation({x:P.pos.x,y:P.pos.y+0.9,z:P.pos.z});
+  if(P.mode!=='active') return;
+  if(moving){ let d=Math.atan2(dx,dz)-P.yaw; d=Math.atan2(Math.sin(d),Math.cos(d)); P.yaw+=d*clamp(12*dt,0,1); }
+  for(const pad of pads){ if(gr&&pad.cool<=0&&Math.hypot(P.pos.x-pad.x,P.pos.z-pad.z)<pad.r){ P.vy=pad.power; pad.cool=0.6; P.grounded=false; sfx.boing(); } }
+  /* Шредер: затягивает только при реальном контакте тела с валками, либо если долго стоять на зубьях */
+  {
+    let caught=false, onTeeth=false;
+    for(const s of shredders){
+      if(Math.abs(P.pos.x-s.cx)>s.w/2+1||Math.abs(P.pos.z-s.cz)>s.d/2+1.5||P.pos.y>s.h+2.2) continue;
+      for(const [hh,rr] of SH_SAMPLES){ _p.set(P.pos.x,P.pos.y+hh,P.pos.z); if(s.hit(_p,rr,0,0.05)){ caught=true; break; } }
+      if(caught) break;
+      _p.set(P.pos.x,P.pos.y+0.12,P.pos.z);
+      if(P.grounded&&s.hit(_p,0.09,0.14,0.3)) onTeeth=true;
+    }
+    P.dwell=onTeeth?P.dwell+dt:Math.max(0,P.dwell-dt*2);
+    if(P.dwell>0.4) caught=true;
+    if(caught){ P.dwell=0; notify('Вас затянуло в шредер!','bad'); startRagdoll(new THREE.Vector3(P.hv.x*0.3,-2,P.hv.y*0.3),{grace:0}); return; }
+  }
+  for(const h of hazards){
+    h.cd-=dt; if(h.cd>0) continue;
+    for(let i=SAMPLES.length-1;i>=0;i--){
+      _p.set(P.pos.x,P.pos.y+SAMPLES[i][0],P.pos.z);
+      const v=h.hit(_p,SAMPLES[i][1]);
+      if(v&&(h.kind==='press'||v.length()>1.6)){ h.cd=0.7; hazardHit(h,SAMPLES[i][0],v.clone()); return; }
+    }
+  }
+  if(P.pos.y<-40) respawn();
+}
+
+/* ================= АНИМАЦИЯ ПЕРСОНАЖА ================= */
+const gb=(x,c,w)=>{ const d=Math.atan2(Math.sin(x-c),Math.cos(x-c)); return Math.exp(-(d*d)/(w*w)); };
+function poseActive(dt){
+  A.t+=dt;
+  for(const n of ORDER) rig[n].group.position.copy(rig[n].rest);
+  A.sm=lerp(A.sm,P.hSpeed,1-Math.exp(-10*dt));
+  const PI=Math.PI, spd=A.sm, mv=smooth(0.12,1.1,spd), g=smooth(1.2,6.4,spd), runF=smooth(3.8,6.4,spd), idle=1-mv;
+  const pen={L:legPen('L'),R:legPen('R')}, penMax=Math.max(pen.L,pen.R);
+  /* хромота: чем сильнее повреждена нога, тем заметнее (0..1) */
+  const limp={L:clamp(pen.L*1.7,0,1),R:clamp(pen.R*1.7,0,1)}, limpMax=Math.max(limp.L,limp.R), asym=Math.abs(limp.L-limp.R);
+  const stanceOf=(S)=>1-smooth(-0.3,0.4,Math.cos(A.phase+(S==='R'?PI:0)+0.45));
+  const badS=limp.L>=limp.R?'L':'R', stB=stanceOf(badS);
+  // на больной ноге стоит недолго (быстро перенос веса), на здоровой — тяжело переваливается
+  if(spd>0.1) A.phase+=dt*(5.2+spd*0.95)*(1-0.22*penMax)*(1+asym*(0.6*stB-0.25*(1-stB)));
+  const ph=A.phase;
+  const stn={L:stanceOf('L'),R:stanceOf('R')};
+  // шаги (звук в момент постановки ноги)
+  const si=Math.floor((ph-PI/2)/PI);
+  if(si!==A.stepIdx){ A.stepIdx=si; if(P.grounded&&spd>0.9&&A.air<0.5){ sfx.step(spd,surfaceAt());
+    const SS=(((si%2)+2)%2===0)?'L':'R';
+    if(limp[SS]>0.4&&Math.random()<0.14){ sfx.groan(); I.painSpike=Math.min(130,I.painSpike+limp[SS]*4); } } }
+  const airNow=!P.grounded&&P.airT>0.14; A.air=lerp(A.air,airNow?1:0,1-Math.exp(-14*dt));
+  const crN=smooth(0,1,A.crouch); A.crouch=Math.max(0,A.crouch-dt*1.9);
+  const amp=Math.min(1.0,0.28+0.1*spd)*mv;
+  const up=clamp(P.vy/5,-1,1), panic=clamp((-P.vy-7)/8,0,1);
+  const th={}, kn={}, ft={}, ext={};
+  for(const S of ['L','R']){
+    const phi=ph+(S==='R'?PI:0), lim=1-0.55*pen[S];
+    let t=-amp*(Math.sin(phi)+0.12*Math.sin(2*phi+0.6))*lim;
+    const swing=Math.max(0,Math.cos(phi+0.45));
+    let k=mv*((0.09+0.25*g)+(0.55+0.95*g)*Math.pow(swing,1.3)+0.2*gb(phi,PI/2+0.5,0.5)*(1-0.4*g))*(1-0.3*pen[S])+0.04;
+    if(pen[S]>0.3&&mv>0.1){ k*=0.5; t*=0.7; }
+    t-=1.0*crN; k+=1.85*crN;
+    ext[S]=0.43*Math.cos(t)+0.40*Math.cos(t+k)+0.08;
+    // перекат стопы: пятка → носок → отрыв
+    const roll=mv*(-0.3*gb(phi,PI/2+0.1,0.35)+(0.4+0.3*g)*gb(phi,-PI/2+0.15,0.4)-0.2*gb(phi,0.3,0.8));
+    let swingK=swing;
+    if(A.air>0.01){
+      const fl=Math.sin(A.t*17+(S==='R'?2:0))*0.55*panic;
+      const ta=(S==='L'?-0.65:-0.2)-0.12*up+fl*0.5, ka=(S==='L'?1.0:0.55)+0.15*(1-up)+Math.abs(fl)*0.3;
+      t=lerp(t,ta,A.air); k=lerp(k,ka,A.air);
+    }
+    th[S]=t; kn[S]=clamp(k,0,2.55);
+    ft[S]=clamp(-(t+kn[S])*(1-0.35*swingK*(1-A.air))*lerp(1,0.85,A.air)+roll*(1-A.air)-0.22*limp[S]*swingK*mv,-1.1,1.1);
+  }
+  const bob=runF*0.05*Math.pow(Math.sin(ph),2);
+  // таз проваливается, когда вес на повреждённой ноге
+  const limpDrop=(limp.L*stn.L+limp.R*stn.R)*0.06*mv;
+  const pelY=lerp(0.07+Math.max(ext.L,ext.R)+bob-limpDrop,0.98,A.air);
+  let pelRoll=-0.035*Math.cos(ph)*mv+0.014*Math.sin(A.t*0.55)*idle+pen.L*0.09-pen.R*0.09;
+  const pelYaw=-0.1*Math.sin(ph)*mv*(0.6+0.4*g);
+  const lean=clamp((P.hSpeed-A.sm)*0.05,-0.12,0.12);
+  let torX=0.03+0.05*g+0.13*runF+0.27*crN+(I.bone.ribs>=1?0.05:0)+(I.bone.ribs>=2?0.1:0)+clamp(I.pain/200,0,0.5)*0.15+lean*(1-A.air);
+  torX+=0.012*Math.sin(A.t*1.7)*idle+0.02*runF*Math.cos(2*ph)*mv; torX=lerp(torX,0.1,A.air);
+  torX+=limpMax*0.1*(1-A.air);
+  const torYaw=0.14*Math.sin(ph)*mv*(0.6+0.4*g);
+  // корпус заваливается на больную ногу в фазе опоры (и стоя — смещает вес)
+  let torZ=0.03*Math.cos(ph)*mv-pen.L*0.08+pen.R*0.08-(limp.L*stn.L-limp.R*stn.R)*0.17*mv*(1-A.air);
+  const cn=I.concussion/100; let headZ=0;
+  if(cn>0.2){ torZ+=Math.sin(A.t*1.1)*0.07*cn; torX+=Math.sin(A.t*0.8)*0.05*cn; headZ=Math.sin(A.t*1.4)*0.12*cn; }
+  rig.pelvis.group.position.set(rig.pelvis.rest.x-0.02*Math.cos(ph)*mv*(1-0.5*runF)*(1-A.air),pelY,0);
+  rig.pelvis.group.rotation.set(0,pelYaw,pelRoll);
+  rig.torso.group.rotation.set(torX,torYaw,torZ);
+  rig.head.group.rotation.set(-torX*0.6+0.03*Math.sin(A.t*0.9),-(pelYaw+torYaw)*0.85,-(torZ+pelRoll)*0.6+headZ);
+  const armA=(0.1+0.2*smooth(0.4,3,spd)+0.5*g+0.25*runF)*mv;
+  for(const [s,S] of [[1,'L'],[-1,'R']]){
+    const sw=(S==='L'?1:-1)*Math.sin(ph);
+    let ux=armA*sw+0.04*Math.sin(A.t*1.5+(S==='R'?1.7:0))*idle;
+    let uz=s*(0.06+0.05*runF+0.02*Math.sin(A.t*1.3)*idle);
+    let fx=-(0.18+0.12*g+0.85*runF)-0.35*Math.max(0,-sw)*(0.4+runF)*mv-0.04*Math.sin(A.t*1.7)*idle;
+    const fl=Math.sin(A.t*15+(S==='R'?1.6:0))*0.5*panic;
+    ux=lerp(ux,-0.35+fl,A.air); uz=lerp(uz,s*(0.95+0.5*panic),A.air); fx=lerp(fx,-0.3-Math.abs(fl)*0.6,A.air);
+    ux-=0.9*crN; fx-=0.5*crN;
+    { // рука на стороне больной ноги придерживает бедро
+      const hold=smooth(0.3,0.7,limp[S])*(1-A.air)*(1-runF);
+      ux*=1-0.7*hold; fx=lerp(fx,-0.5,hold);
+    }
+    if(armBroken(S)){ ux=-0.2; uz=-s*0.14; fx=-1.35; }
+    rig['uArm'+S].group.rotation.set(ux,0,uz); rig['fArm'+S].group.rotation.set(clamp(fx,-2.5,0),0,0);
+    rig['thigh'+S].group.rotation.set(th[S],0,s*0.03*(1+runF)); rig['shin'+S].group.rotation.set(kn[S],0,0); rig['shin'+S].foot.rotation.set(ft[S],0,0);
+  }
+  if(P.blend>0){
+    P.blend=Math.max(0,P.blend-dt/0.75); const t=smooth(0,1,P.blend);
+    for(const n of ORDER){ const p=rig[n]; if(!p.saved) continue; p.group.position.lerp(p.saved.pos,t); p.group.quaternion.slerp(p.saved.quat,t); }
+  }
+}
+
+/* ================= ТРАВМЫ: обновление каждый тик ================= */
+function updateInjuries(dt){
+  if(P.mode==='crushed') return;
+  const br=bleedRate();
+  if(!P.dead){ if(br>0) I.blood=Math.max(0,I.blood-br*dt); else I.blood=Math.min(5000,I.blood+0.5*dt); }
+  let base=0;
+  for(const b in BONES) base+=[0,6,22,38][I.bone[b]]*(I.splint[b]?0.6:1);
+  for(const n of ORDER){ base+=I.bruise[n]*9; if(I.mangled[n]) base+=40; }
+  for(const w of I.wounds) if(!w.bandaged) base+=6;
+  if(I.pill>0){ I.pill-=dt; base*=0.45; }
+  base*=1-0.4*I.adren; I.adren=Math.max(0,I.adren-dt/25);
+  I.painBase+=clamp(base-I.painBase,-6*dt,50*dt);
+  I.painSpike=Math.max(0,I.painSpike-22*dt);
+  I.pain=I.painBase+I.painSpike;
+  for(const n of ORDER) I.bruise[n]=Math.max(0,I.bruise[n]-0.004*dt);
+  I.concussion=Math.max(0,I.concussion-0.55*dt);
+  if(!P.dead){
+    let tg=100-Math.max(0,I.concussion-35)*0.6-Math.max(0,I.pain-95)*1.1;
+    if(I.blood<3200) tg-=(3200-I.blood)/12; if(I.bone.ribs>=3) tg-=15;
+    tg=clamp(tg,0,100); I.consc+=clamp(tg-I.consc,-10*dt,5*dt);
+    if(I.koT>0){ I.koT-=dt; I.consc=Math.min(I.consc,18); if(I.koT<=0){ I.koT=0; notify('Вы пришли в себя','good'); } }
+    else if(I.consc<14) knockOut(rnd(5,9),'обморок');
+    if(I.blood<1400) die('Потеря крови');
+    if((I.blood<3600||I.pain>85)){ I.hbT-=dt; if(I.hbT<=0){ sfx.beat(); I.hbT=lerp(1.1,0.45,clamp((3600-I.blood)/2000+(I.pain-85)/80,0,1)); } }
+  } else P.deadT+=dt;
+}
+
+/* ================= КАМЕРА ================= */
+const camTarget=new THREE.Vector3(0,1.4,0); let camRoll=0, camFov=65;
+function updateCamera(dt){
+  if(P.mode==='active') _p.set(P.pos.x,P.pos.y+1.35-A.crouch*0.35,P.pos.z);
+  else if(P.mode==='ragdoll'&&rig.pelvis.body){ const t=rig.pelvis.body.translation(); _p.set(t.x,t.y+0.5,t.z); }
+  else _p.set(P.pos.x,P.pos.y+0.6,P.pos.z);
+  camTarget.lerp(_p,1-Math.exp(-(P.mode==='active'?20:7)*dt));
+  const cp=Math.cos(camPitch), dir={x:Math.sin(camYaw)*cp,y:Math.sin(camPitch),z:Math.cos(camYaw)*cp};
+  let d=camDist;
+  const hit=world.castRay(new RAPIER.Ray({x:camTarget.x,y:camTarget.y,z:camTarget.z},dir),camDist+0.3,true,undefined,ENV_RAY,playerCol);
+  if(hit){ const toi=hit.timeOfImpact!==undefined?hit.timeOfImpact:hit.toi; d=clamp(toi-0.25,0.5,camDist); }
+  const sh=trauma*trauma*0.3;
+  camera.position.set(camTarget.x+dir.x*d+rnd(-sh,sh),camTarget.y+dir.y*d+rnd(-sh,sh),camTarget.z+dir.z*d+rnd(-sh,sh));
+  camera.lookAt(camTarget.x,camTarget.y+0.1,camTarget.z);
+  const cn=I.concussion/100; camRoll=lerp(camRoll,Math.sin(GT*1.1)*0.06*cn+(I.koT>0?0.35:0),1-Math.exp(-4*dt));
+  camera.rotateZ(camRoll);
+  const tf=(P.mode==='active'&&P.hSpeed>5.5?72:65)+(P.mode==='ragdoll'?R.speed*0.5:0);
+  camFov=lerp(camFov,Math.min(tf,85),1-Math.exp(-4*dt)); if(Math.abs(camera.fov-camFov)>0.05){ camera.fov=camFov; camera.updateProjectionMatrix(); }
+  trauma=Math.max(0,trauma-1.3*dt);
+  sky.position.copy(camera.position);
+  sun.target.position.set(camTarget.x,0,camTarget.z); sun.position.set(camTarget.x+50,80,camTarget.z+30);
+}
+
+/* ================= ВВОД: кадр ================= */
+function frameInput(dt){
+  if(pressed.KeyT){ timeScale=timeScale===1?0.25:1; sfx.blip(); notify(timeScale===1?'Нормальное время':'Замедление ×0.25'); }
+  if(pressed.Tab){ const b=$('bodyPanel'); b.style.display=b.style.display==='none'?'':'none'; }
+  if(pressed.Digit1) useItem('band'); if(pressed.Digit2) useItem('pill'); if(pressed.Digit3) useItem('splint');
+  if(pressed.KeyR) respawn();
+  if(pressed.Space) P.jumpBuf=0.14;
+  const ctrl=!P.dead&&I.koT<=0;
+  if(pressed.KeyQ&&ctrl){
+    if(P.mode==='active') startRagdoll(new THREE.Vector3(P.hv.x*0.9,Math.max(0,P.vy)*0.5,P.hv.y*0.9),{voluntary:true,grace:0.12,ang:0.4});
+    else if(canGetUp()) standUp();
+  }
+  if(pressed.Space&&ctrl&&P.mode==='ragdoll'&&canGetUp()) standUp();
+  const pp=playerPos(); const dm=Math.hypot(pp.x-medic.pos.x,pp.z-medic.pos.z);
+  let prompt='';
+  if(P.mode==='ragdoll'&&!P.dead&&I.koT<=0){ prompt=I.curlT>0?'Вас скрутило от боли… (обезболивающее [2] ослабит приступ)':canStand()?(canGetUp()?'ПРОБЕЛ или Q — подняться':''):'Вы не можете встать — ползите (WASD)'; }
+  if(!P.dead&&dm<3.6&&P.mode!=='crushed'){
+    if(keys.KeyE&&I.koT<=0){ I.healT+=dt; prompt=`Лечение… ${Math.min(100,I.healT/3*100)|0}%`; if(I.healT>=3){ I.healT=0; fullHeal(); } }
+    else { I.healT=0; prompt='Удерживайте E — лечение в медпункте'; }
+  } else I.healT=0;
+  const pe=$('prompt'); if(prompt){ pe.textContent=prompt; pe.style.display='block'; } else pe.style.display='none';
+  for(const k in pressed) pressed[k]=false;
+}
+
+/* ================= HUD ================= */
+const DIAG={head:[55,0,30,34],torso:[40,38,60,70],pelvis:[44,110,52,30],uArmR:[16,40,20,40],fArmR:[14,82,18,46],uArmL:[104,40,20,40],fArmL:[108,82,18,46],thighR:[44,142,24,60],shinR:[44,204,24,62],thighL:[72,142,24,60],shinL:[72,204,24,62]};
+const dEls={};
+for(const n in DIAG){ const e=document.createElement('div'), [x,y,w,h]=DIAG[n]; e.style.cssText=`left:${x}px;top:${y}px;width:${w}px;height:${h}px`; e.className='s0'; e.title=PART_RU[n]; $('diagram').appendChild(e); dEls[n]=e; }
+function partState(n){
+  if(I.mangled[n]) return 4; let st=n==='torso'?Math.max(I.bone.ribs,I.bone.spine):I.bone[boneOf(n)];
+  if(st===0&&I.bruise[n]>0.45) st=1; return st;
+}
+let lastList='', lastTags='', hudT=0, lastBlur=-1;
+function updateHUD(dt){
+  hudT-=dt; 
+  /* Без чёрного экрана: красноватая виньетка боли + светлая молочная дымка + размытие («помутнение в глазах») */
+  const pe=clamp((I.pain-35)/110,0,0.7)*(0.8+0.2*Math.sin(GT*5)); $('fxPain').style.opacity=pe;
+  const haze=Math.max(clamp((60-I.consc)/60,0,1)*0.6, I.koT>0?0.6:0, clamp((I.concussion-30)/70,0,1)*0.35, I.curlT>0?0.3:0);
+  $('fxBlack').style.opacity=haze;
+  const bBase=clamp(I.concussion-20,0,80)/80*3+(I.consc<60?(60-I.consc)/60*3.5:0)+(I.curlT>0?2:0)+(I.koT>0?2:0)+clamp((I.pain-100)/80,0,1)*1.5;
+  const bl=Math.round(Math.min(7,bBase*(0.85+0.15*Math.sin(GT*2.3)))*4)/4;
+  if(bl!==lastBlur){ renderer.domElement.style.filter=bl>0?`blur(${bl}px) saturate(${(1-bl*0.05).toFixed(2)})`:''; lastBlur=bl; }
+  if(P.mode==='active'&&!P.grounded&&P.vy<-2){ const v=-P.vy; $('speedo').innerHTML=`Скорость падения: <b>${v.toFixed(1)} м/с</b><br>≈ ${(v*v/19.62).toFixed(1)} м высоты`+(timeScale<1?'<br>⏱ ×0.25':''); }
+  else $('speedo').innerHTML=timeScale<1?'⏱ Замедление ×0.25':'';
+  if(P.dead&&P.deadT>1.8&&$('death').style.display==='none'){
+    $('deathWhy').textContent=I.deathWhy||'Критическая травма';
+    const fr=Object.keys(BONES).filter(b=>I.bone[b]>=2).map(b=>BONES[b][0]+' — '+STAT[I.bone[b]]);
+    $('deathInj').textContent=fr.length?'Переломы: '+fr.join('; '):'Переломов нет';
+    $('death').style.display='flex'; if(document.exitPointerLock&&locked) document.exitPointerLock();
+  }
+  if(hudT>0) return; hudT=0.1;
+  const set=(id,w,t)=>{ $(id).style.width=w+'%'; if(t!==undefined) $(id+'T').textContent=t; };
+  set('vBlood',clamp(I.blood/50,0,100),Math.round(I.blood/50)+'%'); set('vPain',clamp(I.pain/1.4,0,100),Math.round(I.pain));
+  set('vCons',I.consc,Math.round(I.consc)); set('vStam',I.stamina,Math.round(I.stamina));
+  $('nBand').textContent=I.items.band; $('nPill').textContent=I.items.pill; $('nSplint').textContent=I.items.splint;
+  if(visDirty||GT%1<0.12) updateVisuals();
+  const tags=[]; const br=bleedRate();
+  if(br>0) tags.push(`<span class="tag">Кровотечение ${br.toFixed(0)} мл/с</span>`);
+  if(I.internal>0) tags.push('<span class="tag">Внутреннее кровотечение</span>');
+  if(I.concussion>20) tags.push(`<span class="tag warn">Сотрясение ${Math.round(I.concussion)}%</span>`);
+  if(I.pain>80) tags.push('<span class="tag">Болевой шок</span>');
+  if(I.curlT>0) tags.push('<span class="tag">Корчится от боли</span>');
+  if(I.paralyzed) tags.push('<span class="tag">Паралич ног</span>');
+  else if(!canStand()) tags.push('<span class="tag">Не может стоять</span>');
+  else if(Math.max(legPen('L'),legPen('R'))>0.1) tags.push('<span class="tag warn">Хромота</span>');
+  if(I.bone.ribs>=2) tags.push('<span class="tag warn">Трудно дышать</span>');
+  if(I.pill>0) tags.push(`<span class="tag ok">Обезболено ${Math.ceil(I.pill)}с</span>`);
+  if(I.koT>0) tags.push('<span class="tag">Без сознания</span>');
+  const ts=tags.join(''); if(ts!==lastTags){ $('tags').innerHTML=ts; lastTags=ts; }
+  for(const n in dEls){ const c='s'+partState(n); if(dEls[n].className!==c) dEls[n].className=c; }
+  const items=[];
+  for(const b in BONES) if(I.bone[b]>0) items.push([I.bone[b],`${BONES[b][0]}: ${STAT[I.bone[b]]}${I.splint[b]?' (шина)':''}`]);
+  for(const n of ORDER) if(I.mangled[n]) items.push([4,`${PART_RU[n]}: раздроблено`]);
+  for(const w of I.wounds) items.push([w.bandaged?1:3,`Рана (${PART_RU[w.part]}): ${w.bandaged?'перевязана':'кровоточит'}`]);
+  if(I.concussion>15) items.push([2,`Сотрясение мозга: ${Math.round(I.concussion)}%`]);
+  const br2=ORDER.filter(n=>I.bruise[n]>0.3).map(n=>PART_RU[n]); if(br2.length) items.push([1,'Ушибы: '+br2.join(', ')]);
+  items.sort((a,b)=>b[0]-a[0]);
+  const ls=items.length?items.map(([l,t])=>`<li class="l${l}">${t}</li>`).join(''):'<li class="none">Травм нет</li>';
+  if(ls!==lastList){ $('injList').innerHTML=ls; lastList=ls; }
+}
+
+/* ================= ЗВУК-ФОН ================= */
+function audioAmbient(dt){
+  if(!AC||!grindGain) return; const now=AC.currentTime, pp=playerPos();
+  // писк в ушах и приглушение: полностью зависят от текущего сотрясения и таймера удара
+  ringT=Math.max(0,ringT-dt);
+  const cn=clamp((I.concussion-12)/88,0,1), ring=clamp(ringT/3,0,1);
+  const tinn=clamp(cn*0.04+ring*0.03,0,0.06);
+  tinnGain.gain.setTargetAtTime(tinn<0.0008?0:tinn,now,0.15);
+  const muffle=P.dead||I.koT>0?700:lerp(22000,2200,clamp(cn*0.8+ring*0.5,0,1));
+  lpMaster.frequency.setTargetAtTime(muffle,now,0.12);
+  // шредеры
+  let g=1e9,h=1e9;
+  for(const s of shredders) g=Math.min(g,Math.hypot(pp.x-s.cx,pp.z-s.cz));
+  for(const [x,z] of [[0,30],[25,14],[-30,30],[-52,40],[46,12],[30,-60]]) h=Math.min(h,Math.hypot(pp.x-x,pp.z-z));
+  grindGain.gain.setTargetAtTime(0.18*Math.pow(clamp(1-g/28,0,1),2),now,0.2);
+  shredGain.gain.setTargetAtTime(0.16*Math.pow(clamp(1-g/24,0,1),2),now,0.2);
+  humGain.gain.setTargetAtTime(0.12*clamp(1-h/30,0,1),now,0.2);
+  // свист молотов / свипера / шара
+  let wh=0, wv=0;
+  for(const hz of hazards) if(hz.px!==undefined&&hz.w!==undefined){ const nv=nearV(hz.px,hz.pz,18)*clamp(Math.abs(hz.w)/1.5,0,1.2); if(nv>wh){ wh=nv; wv=Math.abs(hz.w); } }
+  whooshGain.gain.setTargetAtTime(0.22*wh,now,0.05); whooshF.frequency.setTargetAtTime(260+wv*260,now,0.08);
+  // лифт
+  if(elevator){ const e=nearV(elevator.x,elevator.z,40); const mv=Math.abs(elevator.dy)>1e-5; elevGain.gain.setTargetAtTime(e*(mv?0.2:0.03),now,0.25); elevOsc.frequency.setTargetAtTime(mv?52+Math.abs(elevator.dy)*1800:48,now,0.3); }
+  // ветер: падение/полёт/быстрый бег
+  let v=0;
+  if(P.mode==='active') v=P.grounded?P.hSpeed*0.5:Math.hypot(P.hSpeed,P.vy);
+  else if(P.mode==='ragdoll') v=R.speed*1.1;
+  windGain.gain.setTargetAtTime(0.02+clamp((v-5)/22,0,1)*0.36,now,0.1); windF.frequency.setTargetAtTime(300+v*38,now,0.15);
+  // дыхание
+  let br=0;
+  if(!P.dead&&I.koT<=0&&P.mode!=='crushed') br=clamp((70-I.stamina)/70,0,1)*0.16+clamp((I.pain-60)/80,0,1)*0.08+(I.bone.ribs>=2?0.05:0)+(I.curlT>0?0.08:0);
+  const rate=2.4+br*8; const pulse=0.35+0.65*Math.pow(0.5+0.5*Math.sin(GT*rate),2);
+  breathGain.gain.setTargetAtTime(br*pulse,now,0.05);
+}
+
+/* ================= ГЛАВНЫЙ ЦИКЛ ================= */
+function tick(dt){
+  GT+=dt;
+  for(const u of updaters) u(dt,GT);
+  for(const pd of pads) pd.cool-=dt;
+  if(P.mode==='active') activeTick(dt); else if(P.mode==='ragdoll') ragdollTick(dt);
+  updateInjuries(dt);
+  world.step();
+}
+const face=()=>{
+  const sleepy=(P.mode!=='active'&&(I.koT>0||P.dead||I.curlT>0))||(A.blink<0.12&&P.mode==='active')||P.mode==='crushed';
+  for(const l of rig.head.lids) l.visible=sleepy;
+  rig.head.mouth.scale.y=I.koT>0||P.dead?0.18:0.3+0.4*clamp(I.pain/50,0,2.5);
+};
+let dripT=0;
+function drips(dt){
+  const br=bleedRate(); if(br<=0||P.mode==='crushed') return;
+  dripT-=dt; if(dripT>0) return; dripT=clamp(1.3-br/35,0.1,1.3);
+  let x,y,z; const ws=I.wounds.filter(w=>!w.bandaged);
+  if(P.mode==='ragdoll'&&rig.pelvis.body){ const n=ws.length?ws[(Math.random()*ws.length)|0].part:'torso', t=rig[n].body.translation(); x=t.x;y=t.y;z=t.z; }
+  else { x=P.pos.x; y=P.pos.y+0.7; z=P.pos.z; }
+  spawnBlood(x,y,z,0,0.3,0,1+(br>20?2:0),0.5);
+  const g=groundBelow(x,y+0.2,z); if(g!==null&&Math.random()<0.7) addDecal(x+rnd(-0.1,0.1),g,z+rnd(-0.1,0.1),rnd(0.06,0.16)+br/500);
+}
+let last=performance.now(), acc=0;
+function frame(now){
+  requestAnimationFrame(frame);
+  const rdt=Math.min(0.1,(now-last)/1000); last=now;
+  if(!started){
+    const t=now/1000*0.12; camera.position.set(Math.sin(t)*16,5.5,Math.cos(t)*16); camera.lookAt(0,1.6,0); sky.position.copy(camera.position);
+    renderer.render(scene,camera); return;
+  }
+  frameInput(rdt);
+  acc+=rdt*timeScale; let steps=0;
+  while(acc>=DT&&steps<8){ tick(DT); acc-=DT; steps++; }
+  if(steps>=8) acc=0;
+  const dt=rdt*timeScale;
+  for(const d of dynProps){ d.mesh.position.copy(d.body.translation()); d.mesh.quaternion.copy(d.body.rotation()); }
+  if(visDirty) updateVisuals();
+  A.blink-=dt; if(A.blink<-0.0) A.blink=rnd(2.5,5);
+  if(P.mode==='ragdoll') syncRagdoll();
+  else if(P.mode==='active'){ root.position.copy(P.pos); root.rotation.y=P.yaw; poseActive(dt); }
+  else if(P.mode==='crushed'){ P.flat=Math.min(1,P.flat+rdt*7); root.scale.y=lerp(1,0.12,P.flat); }
+  face(); drips(dt); updateBlood(dt); audioAmbient(rdt);
+  updateCamera(rdt); updateHUD(rdt);
+  renderer.render(scene,camera);
+}
+$('loading').style.display='none'; $('startBody').style.display='block';
+function startGame(){
+  initAudio(); if(AC&&AC.state==='suspended') AC.resume();
+  $('start').style.display='none'; started=true; last=performance.now();
+  try{ renderer.domElement.requestPointerLock(); }catch(e){}
+  notify('Добро пожаловать на полигон! Поднимись по лестнице или прыгни на катапульте.','');
+}
+$('btnPlay').addEventListener('click',startGame);
+$('btnRespawn').addEventListener('click',()=>{ respawn(); try{ renderer.domElement.requestPointerLock(); }catch(e){} });
+updateVisuals();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
